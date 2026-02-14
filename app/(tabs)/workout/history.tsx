@@ -104,7 +104,10 @@ export default function WorkoutHistoryScreen() {
     const ex = session.template_snapshot.exercises?.find(
       (e) => e.exercise_id === exerciseId
     );
-    return ex?.exercise?.name || 'Unknown Exercise';
+    if (ex?.exercise?.name) return ex.exercise.name;
+    // Fallback: check if exercise name is stored at the top level of the snapshot entry
+    if ((ex as any)?.name) return (ex as any).name;
+    return 'Unknown Exercise';
   };
 
   const renderSession = ({ item }: { item: WorkoutSession }) => {

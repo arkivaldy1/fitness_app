@@ -33,7 +33,10 @@ export default function ExerciseHistoryScreen() {
   }, [exerciseId]);
 
   const loadHistory = async () => {
-    if (!exerciseId) return;
+    if (!exerciseId) {
+      setIsLoading(false);
+      return;
+    }
 
     try {
       if (!paramName) {

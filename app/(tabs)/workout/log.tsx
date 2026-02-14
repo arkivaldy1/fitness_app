@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList, Modal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, FlatList, Modal, Pressable, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,6 +10,8 @@ import { useWorkoutStore, useCurrentExercise, useWorkoutProgress, useAuthStore }
 import { SEED_EXERCISES } from '../../../constants/exercises';
 import { calculateVolume } from '../../../lib/analytics';
 import type { Exercise } from '../../../types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function WorkoutLogScreen() {
   const router = useRouter();
@@ -27,15 +29,18 @@ export default function WorkoutLogScreen() {
 
   const currentExercise = useCurrentExercise();
   const progress = useWorkoutProgress();
+  const tabScrollRef = useRef<FlatList>(null);
 
   const [restTimeRemaining, setRestTimeRemaining] = useState<number | undefined>();
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [isRestTimerMinimized, setIsRestTimerMinimized] = useState(false);
 
   // Timer for rest countdown
   useEffect(() => {
     if (!activeSession?.restTimerEnd) {
       setRestTimeRemaining(undefined);
+      setIsRestTimerMinimized(false);
       return;
     }
 
@@ -46,6 +51,7 @@ export default function WorkoutLogScreen() {
       if (remaining === 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         clearRestTimer();
+        setIsRestTimerMinimized(false);
       }
     };
 
@@ -68,6 +74,20 @@ export default function WorkoutLogScreen() {
     return () => clearInterval(interval);
   }, [activeSession?.startTime]);
 
+  // Auto-scroll tab bar to active exercise
+  useEffect(() => {
+    if (activeSession && tabScrollRef.current && activeSession.exercises.length > 0) {
+      const timeout = setTimeout(() => {
+        tabScrollRef.current?.scrollToIndex({
+          index: activeSession.currentExerciseIndex,
+          animated: true,
+          viewPosition: 0.5,
+        });
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [activeSession?.currentExerciseIndex, activeSession?.exercises.length]);
+
   const { addExerciseToSession } = useWorkoutStore();
 
   const formatElapsedTime = (seconds: number) => {
@@ -77,6 +97,12 @@ export default function WorkoutLogScreen() {
     if (hrs > 0) {
       return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatRestTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -122,6 +148,23 @@ export default function WorkoutLogScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const handleSkipRest = () => {
+    clearRestTimer();
+    setIsRestTimerMinimized(false);
+  };
+
+  const setCurrentExerciseIndex = (index: number) => {
+    const store = useWorkoutStore.getState();
+    if (!store.activeSession) return;
+    // Navigate to the target exercise
+    const current = store.activeSession.currentExerciseIndex;
+    if (index > current) {
+      for (let i = 0; i < index - current; i++) nextExercise();
+    } else if (index < current) {
+      for (let i = 0; i < current - index; i++) previousExercise();
+    }
+  };
+
   if (!activeSession) {
     router.replace('/(tabs)/workout');
     return null;
@@ -150,7 +193,6 @@ export default function WorkoutLogScreen() {
 
           {/* Exercise Picker Header */}
           <View style={styles.pickerHeader}>
-            <Text style={styles.pickerEmoji}>💪</Text>
             <Text style={styles.pickerTitle}>Choose Your Exercise</Text>
             <Text style={styles.pickerSubtitle}>Tap any exercise to start logging</Text>
           </View>
@@ -226,6 +268,15 @@ export default function WorkoutLogScreen() {
   const defaultWeight = lastSet?.weight || 0;
   const defaultReps = lastSet?.reps || parseInt(currentExercise.targetReps.split('-')[0]) || 10;
 
+  const restTimerActive = restTimeRemaining !== undefined && restTimeRemaining > 0;
+  const restTimerTotal = currentExercise.restSeconds || 90;
+
+  // Tab bar data: exercises + add button
+  const tabData = [
+    ...activeSession.exercises.map((ex, idx) => ({ type: 'exercise' as const, index: idx, name: ex.exerciseName })),
+    { type: 'add' as const, index: -1, name: '+ Add' },
+  ];
+
   return (
     <GradientBackground variant="full">
       <SafeAreaView style={styles.container}>
@@ -260,46 +311,81 @@ export default function WorkoutLogScreen() {
           </Text>
         </View>
 
-        {/* Exercise Navigation */}
-        <View style={styles.exerciseNav}>
+        {/* Minimized Rest Timer Bar */}
+        {restTimerActive && isRestTimerMinimized && (
           <TouchableOpacity
-            onPress={previousExercise}
-            disabled={activeSession.currentExerciseIndex === 0}
-            style={styles.navButton}
+            style={styles.miniRestBar}
+            onPress={() => setIsRestTimerMinimized(false)}
+            activeOpacity={0.8}
           >
-            <Text style={[
-              styles.navButtonText,
-              activeSession.currentExerciseIndex === 0 && styles.navButtonDisabled
-            ]}>
-              ← Prev
-            </Text>
+            <LinearGradient
+              colors={['#4CFCAD', '#4CD0FC']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.miniRestGradient}
+            >
+              <Text style={styles.miniRestLabel}>REST</Text>
+              <Text style={styles.miniRestTime}>{formatRestTime(restTimeRemaining)}</Text>
+              <TouchableOpacity onPress={handleSkipRest}>
+                <Text style={styles.miniRestSkip}>Skip</Text>
+              </TouchableOpacity>
+            </LinearGradient>
           </TouchableOpacity>
+        )}
 
-          <View style={styles.exerciseCounter}>
-            <Text style={styles.exerciseCounterText}>
-              {activeSession.currentExerciseIndex + 1} / {activeSession.exercises.length}
-            </Text>
-          </View>
+        {/* Exercise Navigation — Scrollable Tab Bar */}
+        <View style={styles.tabBarContainer}>
+          <FlatList
+            ref={tabScrollRef}
+            data={tabData}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabBarContent}
+            keyExtractor={(item) => item.type === 'add' ? 'add' : `ex-${item.index}`}
+            onScrollToIndexFailed={() => {}}
+            renderItem={({ item }) => {
+              if (item.type === 'add') {
+                return (
+                  <TouchableOpacity
+                    style={styles.tabPillAdd}
+                    onPress={() => setShowExercisePicker(true)}
+                  >
+                    <Text style={styles.tabPillAddText}>+ Add</Text>
+                  </TouchableOpacity>
+                );
+              }
 
-          <TouchableOpacity
-            onPress={() => setShowExercisePicker(true)}
-            style={styles.addExerciseNavButton}
-          >
-            <Text style={styles.addExerciseNavText}>+ Add</Text>
-          </TouchableOpacity>
+              const isActive = item.index === activeSession.currentExerciseIndex;
+              const exerciseState = activeSession.exercises[item.index];
+              const isComplete = exerciseState.completedSets.filter(s => !s.skipped).length >= exerciseState.targetSets;
 
-          <TouchableOpacity
-            onPress={nextExercise}
-            disabled={activeSession.currentExerciseIndex === activeSession.exercises.length - 1}
-            style={styles.navButton}
-          >
-            <Text style={[
-              styles.navButtonText,
-              activeSession.currentExerciseIndex === activeSession.exercises.length - 1 && styles.navButtonDisabled
-            ]}>
-              Next →
-            </Text>
-          </TouchableOpacity>
+              return (
+                <TouchableOpacity
+                  onPress={() => setCurrentExerciseIndex(item.index)}
+                  activeOpacity={0.7}
+                >
+                  {isActive ? (
+                    <LinearGradient
+                      colors={['#4CFCAD', '#4CD0FC']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.tabPillActive}
+                    >
+                      <Text style={styles.tabPillActiveText} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                    </LinearGradient>
+                  ) : (
+                    <View style={[styles.tabPill, isComplete && styles.tabPillComplete]}>
+                      <Text style={[styles.tabPillText, isComplete && styles.tabPillCompleteText]} numberOfLines={1}>
+                        {isComplete ? `${item.name} ✓` : item.name}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
         </View>
 
         <ScrollView
@@ -323,14 +409,14 @@ export default function WorkoutLogScreen() {
               </Text>
               {activeSession.currentExerciseIndex < activeSession.exercises.length - 1 ? (
                 <Button
-                  title="Next Exercise →"
+                  title="Next Exercise"
                   onPress={nextExercise}
                   variant="gradient"
                   size="lg"
                 />
               ) : (
                 <Button
-                  title="Finish Workout 🎉"
+                  title="Finish Workout"
                   onPress={handleFinish}
                   variant="gradient"
                   size="lg"
@@ -358,8 +444,6 @@ export default function WorkoutLogScreen() {
                   },
                 });
               }}
-              restTimeRemaining={restTimeRemaining}
-              restTimerTotal={currentExercise.restSeconds}
               prAchieved={activeSession.latestPrExerciseIndex === activeSession.currentExerciseIndex}
             />
           )}
@@ -377,7 +461,7 @@ export default function WorkoutLogScreen() {
                     <Text style={styles.skippedText}>Skipped</Text>
                   ) : (
                     <Text style={styles.setDetails}>
-                      {set.weight} {set.weight_unit} × {set.reps} reps
+                      {set.weight} {set.weight_unit} x {set.reps} reps
                       {set.rpe && ` @ RPE ${set.rpe}`}
                       {set.is_warmup && ' (warm-up)'}
                     </Text>
@@ -396,6 +480,45 @@ export default function WorkoutLogScreen() {
             </View>
           )}
         </ScrollView>
+
+        {/* Full-Screen Rest Timer Overlay */}
+        {restTimerActive && !isRestTimerMinimized && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setIsRestTimerMinimized(true)}
+          >
+            <LinearGradient
+              colors={['rgba(4, 120, 87, 0.95)', 'rgba(6, 95, 70, 0.97)']}
+              style={styles.restOverlay}
+            >
+              <Text style={styles.restOverlayLabel}>REST</Text>
+              <Text style={styles.restOverlayTime}>{formatRestTime(restTimeRemaining)}</Text>
+
+              {/* Progress bar */}
+              <View style={styles.restOverlayProgressBar}>
+                <View
+                  style={[
+                    styles.restOverlayProgressFill,
+                    { width: `${(restTimeRemaining / restTimerTotal) * 100}%` },
+                  ]}
+                />
+              </View>
+
+              <Text style={styles.restOverlayExercise}>
+                {currentExercise.exerciseName}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.restOverlaySkip}
+                onPress={handleSkipRest}
+              >
+                <Text style={styles.restOverlaySkipText}>Skip Rest</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.restOverlayHint}>Tap anywhere to minimize</Text>
+            </LinearGradient>
+          </Pressable>
+        )}
 
         {/* Add Exercise Overlay */}
         <Modal
@@ -505,7 +628,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
   progressBar: {
     height: 8,
@@ -521,46 +644,88 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 13,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
-  exerciseNav: {
+  // Mini Rest Timer Bar
+  miniRestBar: {
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  miniRestGradient: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(76, 252, 173, 0.2)',
-  },
-  navButton: {
-    padding: 8,
-  },
-  navButtonText: {
-    color: '#059669',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  navButtonDisabled: {
-    color: '#cbd5e1',
-  },
-  exerciseCounter: {
-    backgroundColor: 'rgba(76, 252, 173, 0.15)',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 10,
   },
-  exerciseCounterText: {
-    color: '#059669',
+  miniRestLabel: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  miniRestTime: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  miniRestSkip: {
+    color: 'rgba(0,0,0,0.6)',
     fontSize: 14,
     fontWeight: '600',
   },
-  addExerciseNavButton: {
-    backgroundColor: 'rgba(76, 252, 173, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+  // Scrollable Tab Bar
+  tabBarContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(76, 252, 173, 0.2)',
   },
-  addExerciseNavText: {
+  tabBarContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  tabPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    maxWidth: 140,
+  },
+  tabPillActive: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    maxWidth: 140,
+  },
+  tabPillComplete: {
+    backgroundColor: 'rgba(76, 252, 173, 0.15)',
+  },
+  tabPillText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tabPillActiveText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tabPillCompleteText: {
+    color: '#059669',
+  },
+  tabPillAdd: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(76, 252, 173, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(76, 252, 173, 0.3)',
+    borderStyle: 'dashed',
+  },
+  tabPillAddText: {
     color: '#059669',
     fontSize: 13,
     fontWeight: '700',
@@ -661,16 +826,68 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  // Full-Screen Rest Timer Overlay
+  restOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  restOverlayLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 4,
+    marginBottom: 8,
+  },
+  restOverlayTime: {
+    color: '#fff',
+    fontSize: 80,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    marginBottom: 24,
+  },
+  restOverlayProgressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
+    marginBottom: 20,
+  },
+  restOverlayProgressFill: {
+    height: '100%',
+    backgroundColor: '#4CFCAD',
+    borderRadius: 3,
+  },
+  restOverlayExercise: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 32,
+  },
+  restOverlaySkip: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 24,
+    marginBottom: 24,
+  },
+  restOverlaySkipText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  restOverlayHint: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   // Exercise Picker Styles
   pickerHeader: {
     alignItems: 'center',
     padding: 24,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(76, 252, 173, 0.2)',
-  },
-  pickerEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
   },
   pickerTitle: {
     fontSize: 24,

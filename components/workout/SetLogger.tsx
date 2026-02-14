@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, FlatList } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Card, Button, NumericInput } from '../ui';
+import { Card, Button } from '../ui';
 import type { SetLog, WeightUnit } from '../../types';
+
+const WEIGHT_VALUES = [0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25, 27.5, 30, 32.5, 35, 37.5, 40, 42.5, 45, 47.5, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
+const REPS_VALUES = Array.from({ length: 30 }, (_, i) => i + 1);
 
 interface SetLoggerProps {
   exerciseName: string;
@@ -17,10 +20,138 @@ interface SetLoggerProps {
   onLogSet: (reps: number, weight: number, options?: { rpe?: number; isWarmup?: boolean }) => void;
   onSkipSet: () => void;
   onExerciseNameLongPress?: () => void;
-  restTimeRemaining?: number;
-  restTimerTotal?: number;
   prAchieved?: boolean;
 }
+
+const PillPicker: React.FC<{
+  values: number[];
+  selected: number;
+  onSelect: (value: number) => void;
+  formatLabel?: (value: number) => string;
+  onFineTuneMinus: () => void;
+  onFineTunePlus: () => void;
+}> = ({ values, selected, onSelect, formatLabel, onFineTuneMinus, onFineTunePlus }) => {
+  const flatListRef = useRef<FlatList>(null);
+
+  const scrollToSelected = useCallback(() => {
+    const idx = values.indexOf(selected);
+    // If exact value isn't in the list, find the closest
+    const closestIdx = idx >= 0 ? idx : values.reduce((best, v, i) =>
+      Math.abs(v - selected) < Math.abs(values[best] - selected) ? i : best, 0);
+    if (closestIdx >= 0 && flatListRef.current) {
+      flatListRef.current.scrollToIndex({ index: closestIdx, animated: true, viewPosition: 0.5 });
+    }
+  }, [selected, values]);
+
+  useEffect(() => {
+    // Small delay to ensure FlatList is laid out
+    const timeout = setTimeout(scrollToSelected, 100);
+    return () => clearTimeout(timeout);
+  }, [scrollToSelected]);
+
+  const renderPill = useCallback(({ item }: { item: number }) => {
+    const isSelected = item === selected;
+    const label = formatLabel ? formatLabel(item) : `${item}`;
+    return (
+      <TouchableOpacity
+        onPress={() => {
+          onSelect(item);
+          Haptics.selectionAsync();
+        }}
+        activeOpacity={0.7}
+      >
+        {isSelected ? (
+          <LinearGradient
+            colors={['#4CFCAD', '#4CD0FC']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={pillStyles.pillSelected}
+          >
+            <Text style={pillStyles.pillTextSelected}>{label}</Text>
+          </LinearGradient>
+        ) : (
+          <View style={pillStyles.pill}>
+            <Text style={pillStyles.pillText}>{label}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  }, [selected, onSelect, formatLabel]);
+
+  return (
+    <View style={pillStyles.container}>
+      <TouchableOpacity style={pillStyles.fineButton} onPress={onFineTuneMinus}>
+        <Text style={pillStyles.fineButtonText}>-</Text>
+      </TouchableOpacity>
+      <FlatList
+        ref={flatListRef}
+        data={values}
+        renderItem={renderPill}
+        keyExtractor={(item) => `${item}`}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={pillStyles.listContent}
+        getItemLayout={(_, index) => ({ length: 56, offset: 56 * index, index })}
+        onScrollToIndexFailed={() => {}}
+      />
+      <TouchableOpacity style={pillStyles.fineButton} onPress={onFineTunePlus}>
+        <Text style={pillStyles.fineButtonText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const pillStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fineButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fineButtonText: {
+    color: '#0f172a',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  listContent: {
+    paddingHorizontal: 4,
+    gap: 6,
+    alignItems: 'center',
+  },
+  pill: {
+    height: 38,
+    minWidth: 50,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillSelected: {
+    height: 38,
+    minWidth: 50,
+    paddingHorizontal: 12,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillText: {
+    color: '#64748b',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  pillTextSelected: {
+    color: '#000',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+});
 
 export const SetLogger: React.FC<SetLoggerProps> = ({
   exerciseName,
@@ -34,8 +165,6 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
   onLogSet,
   onSkipSet,
   onExerciseNameLongPress,
-  restTimeRemaining,
-  restTimerTotal,
   prAchieved,
 }) => {
   const [weight, setWeight] = useState(defaultWeight);
@@ -59,12 +188,6 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
     onLogSet(defaultReps, defaultWeight);
   };
 
-  const formatRestTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   return (
     <View style={styles.container}>
       {/* Exercise Name Card */}
@@ -84,7 +207,7 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
           <View style={styles.lastSession}>
             <Text style={styles.lastLabel}>Last time: </Text>
             <Text style={styles.lastValue}>
-              {lastSessionSet.weight}{weightUnit} × {lastSessionSet.reps}
+              {lastSessionSet.weight}{weightUnit} x {lastSessionSet.reps}
             </Text>
           </View>
         )}
@@ -103,71 +226,36 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
         </LinearGradient>
       )}
 
-      {/* Rest Timer */}
-      {restTimeRemaining !== undefined && restTimeRemaining > 0 && (
-        <View style={styles.restTimerContainer}>
-          <LinearGradient
-            colors={['rgba(76, 252, 173, 0.15)', 'rgba(76, 208, 252, 0.15)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.restTimer}
-          >
-            <Text style={styles.restLabel}>REST</Text>
-            <Text style={styles.restTime}>{formatRestTime(restTimeRemaining)}</Text>
-            <View style={styles.restProgressBar}>
-              <View style={[styles.restProgressFill, { width: `${(restTimeRemaining / (restTimerTotal || 90)) * 100}%` }]} />
-            </View>
-          </LinearGradient>
-        </View>
-      )}
-
-      {/* Input Section */}
+      {/* Input Section - Scrollable Pickers */}
       <Card style={styles.inputCard} elevated>
-        <View style={styles.inputRow}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>WEIGHT</Text>
-            <View style={styles.inputControl}>
-              <TouchableOpacity
-                style={styles.stepButton}
-                onPress={() => setWeight(Math.max(0, weight - 2.5))}
-              >
-                <Text style={styles.stepButtonText}>−</Text>
-              </TouchableOpacity>
-              <View style={styles.inputDisplay}>
-                <Text style={styles.inputValue}>{weight}</Text>
-                <Text style={styles.inputUnit}>{weightUnit}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.stepButton}
-                onPress={() => setWeight(weight + 2.5)}
-              >
-                <Text style={styles.stepButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.pickerSection}>
+          <View style={styles.pickerRow}>
+            <Text style={styles.inputLabel}>WEIGHT ({weightUnit})</Text>
+            <Text style={styles.selectedValue}>{weight}</Text>
           </View>
+          <PillPicker
+            values={WEIGHT_VALUES}
+            selected={weight}
+            onSelect={setWeight}
+            onFineTuneMinus={() => setWeight(Math.max(0, weight - 2.5))}
+            onFineTunePlus={() => setWeight(weight + 2.5)}
+          />
+        </View>
 
-          <View style={styles.inputDivider} />
+        <View style={styles.pickerDivider} />
 
-          <View style={styles.inputGroup}>
+        <View style={styles.pickerSection}>
+          <View style={styles.pickerRow}>
             <Text style={styles.inputLabel}>REPS</Text>
-            <View style={styles.inputControl}>
-              <TouchableOpacity
-                style={styles.stepButton}
-                onPress={() => setReps(Math.max(0, reps - 1))}
-              >
-                <Text style={styles.stepButtonText}>−</Text>
-              </TouchableOpacity>
-              <View style={styles.inputDisplay}>
-                <Text style={styles.inputValue}>{reps}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.stepButton}
-                onPress={() => setReps(reps + 1)}
-              >
-                <Text style={styles.stepButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.selectedValue}>{reps}</Text>
           </View>
+          <PillPicker
+            values={REPS_VALUES}
+            selected={reps}
+            onSelect={setReps}
+            onFineTuneMinus={() => setReps(Math.max(1, reps - 1))}
+            onFineTunePlus={() => setReps(reps + 1)}
+          />
         </View>
 
         {/* Advanced Toggle */}
@@ -176,7 +264,7 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
           onPress={() => setShowAdvanced(!showAdvanced)}
         >
           <Text style={styles.advancedToggleText}>
-            {showAdvanced ? '− Hide options' : '+ More options'}
+            {showAdvanced ? '- Hide options' : '+ More options'}
           </Text>
         </TouchableOpacity>
 
@@ -218,7 +306,7 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
       {/* Action Buttons */}
       <View style={styles.actions}>
         <Button
-          title="Complete Set ✓"
+          title="Complete Set"
           onPress={handleLogSet}
           variant="gradient"
           size="lg"
@@ -238,7 +326,7 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
               style={styles.quickButtonGradient}
             >
               <Text style={styles.quickText}>
-                Quick: {defaultWeight}{weightUnit} × {defaultReps}
+                Quick: {defaultWeight}{weightUnit} x {defaultReps}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -250,7 +338,7 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
+    gap: 12,
   },
   exerciseCard: {
     padding: 20,
@@ -319,51 +407,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
-  restTimerContainer: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  restTimer: {
-    padding: 20,
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(76, 252, 173, 0.3)',
-  },
-  restLabel: {
-    color: '#059669',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  restTime: {
-    color: '#059669',
-    fontSize: 48,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
-  },
-  restProgressBar: {
-    width: '100%',
-    height: 4,
-    backgroundColor: 'rgba(76, 252, 173, 0.2)',
-    borderRadius: 2,
-    marginTop: 12,
-  },
-  restProgressFill: {
-    height: '100%',
-    backgroundColor: '#4CFCAD',
-    borderRadius: 2,
-  },
   inputCard: {
-    padding: 20,
+    padding: 16,
   },
-  inputRow: {
+  pickerSection: {
+    gap: 8,
+  },
+  pickerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  inputGroup: {
-    flex: 1,
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   inputLabel: {
@@ -371,51 +423,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
-    marginBottom: 12,
   },
-  inputControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  stepButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepButtonText: {
+  selectedValue: {
     color: '#0f172a',
-    fontSize: 24,
-    fontWeight: '500',
-  },
-  inputDisplay: {
-    alignItems: 'center',
-    minWidth: 60,
-  },
-  inputValue: {
-    color: '#0f172a',
-    fontSize: 32,
+    fontSize: 20,
     fontWeight: '800',
   },
-  inputUnit: {
-    color: '#64748b',
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  inputDivider: {
-    width: 1,
-    height: 60,
+  pickerDivider: {
+    height: 1,
     backgroundColor: '#e2e8f0',
-    marginHorizontal: 16,
+    marginVertical: 12,
   },
   advancedToggle: {
     alignItems: 'center',
-    paddingVertical: 12,
-    marginTop: 8,
+    paddingVertical: 10,
+    marginTop: 4,
   },
   advancedToggleText: {
     color: '#64748b',

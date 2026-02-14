@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Input, NumericInput } from '../../../components/ui';
@@ -229,54 +229,60 @@ export default function WorkoutBuilderScreen() {
 
       {/* Exercise Config Modal */}
       <Modal visible={showExerciseConfig} animationType="slide" transparent>
-        <View style={styles.configOverlay}>
-          <View style={styles.configModal}>
-            <Text style={styles.configTitle}>{selectedExercise?.name}</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.configOverlay}>
+            <View style={styles.configModal}>
+              <Text style={styles.configTitle}>{selectedExercise?.name}</Text>
 
-            <View style={styles.configRow}>
-              <NumericInput
-                value={configSets}
-                onChange={setConfigSets}
-                min={1}
-                max={10}
-                label="Sets"
-              />
-              <View style={styles.configRepsContainer}>
-                <Text style={styles.configLabel}>Reps</Text>
-                <TextInput
-                  style={styles.configRepsInput}
-                  value={configReps}
-                  onChangeText={setConfigReps}
-                  placeholder="8-12"
-                  placeholderTextColor={theme.colors.textMuted}
+              <View style={styles.configRow}>
+                <View style={styles.configInputRow}>
+                  <Text style={styles.configLabel}>Sets</Text>
+                  <NumericInput
+                    value={configSets}
+                    onChange={setConfigSets}
+                    min={1}
+                    max={10}
+                  />
+                </View>
+                <View style={styles.configInputRow}>
+                  <Text style={styles.configLabel}>Reps</Text>
+                  <TextInput
+                    style={styles.configRepsInput}
+                    value={configReps}
+                    onChangeText={setConfigReps}
+                    placeholder="8-12"
+                    placeholderTextColor={theme.colors.textMuted}
+                  />
+                </View>
+                <View style={styles.configInputRow}>
+                  <Text style={styles.configLabel}>Rest (seconds)</Text>
+                  <NumericInput
+                    value={configRest}
+                    onChange={setConfigRest}
+                    min={30}
+                    max={300}
+                    step={15}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.configActions}>
+                <Button
+                  title="Cancel"
+                  onPress={() => setShowExerciseConfig(false)}
+                  variant="ghost"
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title="Add"
+                  onPress={handleAddExercise}
+                  variant="primary"
+                  style={{ flex: 1 }}
                 />
               </View>
-              <NumericInput
-                value={configRest}
-                onChange={setConfigRest}
-                min={30}
-                max={300}
-                step={15}
-                label="Rest (s)"
-              />
-            </View>
-
-            <View style={styles.configActions}>
-              <Button
-                title="Cancel"
-                onPress={() => setShowExerciseConfig(false)}
-                variant="ghost"
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Add"
-                onPress={handleAddExercise}
-                variant="primary"
-                style={{ flex: 1 }}
-              />
             </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </SafeAreaView>
   );
@@ -376,17 +382,19 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   configRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: 'column',
+    gap: 16,
     marginBottom: theme.spacing.lg,
   },
-  configRepsContainer: {
+  configInputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   configLabel: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: '500',
   },
   configRepsInput: {
     backgroundColor: theme.colors.inputBackground,

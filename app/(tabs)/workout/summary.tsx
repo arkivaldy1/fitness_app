@@ -66,44 +66,36 @@ export default function WorkoutSummaryScreen() {
             {formatDuration(lastWorkoutSummary.durationSeconds)}
           </Text>
 
-          {/* Stats */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['rgba(76, 252, 173, 0.12)', 'rgba(76, 208, 252, 0.12)']}
-                style={styles.statGradient}
-              >
+          {/* Stats — Single Combined Card */}
+          <View style={styles.statsCardContainer}>
+            <LinearGradient
+              colors={['rgba(76, 252, 173, 0.10)', 'rgba(76, 208, 252, 0.10)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.statsCard}
+            >
+              <View style={styles.statColumn}>
                 <Text style={styles.statValue}>
                   {formatVolume(lastWorkoutSummary.totalVolume)}
                 </Text>
                 <Text style={styles.statUnit}>kg</Text>
                 <Text style={styles.statLabel}>Volume</Text>
-              </LinearGradient>
-            </View>
-
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['rgba(76, 208, 252, 0.12)', 'rgba(76, 252, 173, 0.12)']}
-                style={styles.statGradient}
-              >
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statColumn}>
                 <Text style={styles.statValue}>
                   {lastWorkoutSummary.exercisesCompleted}
                 </Text>
                 <Text style={styles.statLabel}>Exercises</Text>
-              </LinearGradient>
-            </View>
-
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={['rgba(76, 252, 173, 0.12)', 'rgba(76, 208, 252, 0.12)']}
-                style={styles.statGradient}
-              >
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statColumn}>
                 <Text style={styles.statValue}>
                   {lastWorkoutSummary.setsCompleted}
                 </Text>
                 <Text style={styles.statLabel}>Sets</Text>
-              </LinearGradient>
-            </View>
+              </View>
+            </LinearGradient>
           </View>
 
           {/* PRs */}
@@ -208,23 +200,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 32,
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 28,
+  statsCardContainer: {
     width: '100%',
-  },
-  statCard: {
-    flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
+    marginBottom: 28,
   },
-  statGradient: {
-    padding: 16,
+  statsCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 8,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(76, 252, 173, 0.2)',
+  },
+  statColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(76, 252, 173, 0.3)',
   },
   statValue: {
     fontSize: 28,

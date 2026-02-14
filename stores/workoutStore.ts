@@ -238,11 +238,39 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       lastSessionSets: [],
     };
 
+    // Also update template_snapshot so history can resolve exercise names
+    const snapshotEntry = {
+      id: `dynamic_${Date.now()}`,
+      workout_template_id: activeSession.session.workout_template_id || '',
+      exercise_id: exercise.id,
+      exercise: { id: exercise.id, name: exercise.name },
+      target_sets: sets,
+      target_reps: reps,
+      target_rpe: null,
+      rest_seconds: restSeconds,
+      order_index: activeSession.session.template_snapshot.exercises.length,
+      superset_group: null,
+      tempo: null,
+      notes: null,
+      created_at: new Date().toISOString(),
+    };
+    const updatedSnapshot = {
+      ...activeSession.session.template_snapshot,
+      exercises: [
+        ...activeSession.session.template_snapshot.exercises,
+        snapshotEntry,
+      ],
+    };
+
     set({
       activeSession: {
         ...activeSession,
         exercises: [...activeSession.exercises, newExercise],
         currentExerciseIndex: activeSession.exercises.length, // Jump to new exercise
+        session: {
+          ...activeSession.session,
+          template_snapshot: updatedSnapshot,
+        },
       },
     });
   },
