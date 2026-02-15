@@ -432,20 +432,29 @@ export const completeWorkoutSession = async (
   completedAt: string,
   durationSeconds: number,
   rating?: number,
-  notes?: string
+  notes?: string,
+  templateSnapshot?: Record<string, unknown>
 ): Promise<void> => {
   const database = await getDatabase();
 
-  await database.runAsync(
-    `UPDATE workout_sessions SET completed_at = ?, duration_seconds = ?, rating = ?, notes = ? WHERE id = ?`,
-    [completedAt, durationSeconds, rating || null, notes || null, sessionId]
-  );
+  if (templateSnapshot) {
+    await database.runAsync(
+      `UPDATE workout_sessions SET completed_at = ?, duration_seconds = ?, rating = ?, notes = ?, template_snapshot = ? WHERE id = ?`,
+      [completedAt, durationSeconds, rating || null, notes || null, JSON.stringify(templateSnapshot), sessionId]
+    );
+  } else {
+    await database.runAsync(
+      `UPDATE workout_sessions SET completed_at = ?, duration_seconds = ?, rating = ?, notes = ? WHERE id = ?`,
+      [completedAt, durationSeconds, rating || null, notes || null, sessionId]
+    );
+  }
 
   await addToSyncQueue('update', 'workout_sessions', sessionId, {
     completed_at: completedAt,
     duration_seconds: durationSeconds,
     rating,
     notes,
+    ...(templateSnapshot ? { template_snapshot: templateSnapshot } : {}),
   });
 };
 

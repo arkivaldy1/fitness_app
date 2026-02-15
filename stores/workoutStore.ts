@@ -470,7 +470,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       completedAt,
       durationSeconds,
       rating,
-      notes
+      notes,
+      activeSession.session.template_snapshot as unknown as Record<string, unknown>
     );
 
     // Compute summary before clearing

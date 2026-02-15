@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useWorkoutStore } from '../../../stores';
 import { formatDuration } from '../../../lib/analytics';
-import { theme } from '../../../constants/theme';
+import { theme, rfs } from '../../../constants/theme';
 
 export default function WorkoutSummaryScreen() {
   const router = useRouter();
@@ -183,19 +183,19 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   checkmark: {
-    fontSize: 48,
+    fontSize: rfs(48),
     color: '#000',
     fontWeight: '700',
   },
   title: {
-    fontSize: 28,
+    fontSize: rfs(28),
     fontWeight: '800',
     color: theme.colors.text,
     textAlign: 'center',
     marginBottom: 4,
   },
   duration: {
-    fontSize: 18,
+    fontSize: rfs(18),
     color: theme.colors.textSecondary,
     fontWeight: '500',
     marginBottom: 32,
@@ -225,18 +225,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(76, 252, 173, 0.3)',
   },
   statValue: {
-    fontSize: 28,
+    fontSize: rfs(28),
     fontWeight: '800',
     color: theme.colors.text,
   },
   statUnit: {
-    fontSize: 12,
+    fontSize: rfs(12),
     color: theme.colors.textMuted,
     fontWeight: '500',
     marginTop: -2,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: rfs(12),
     color: theme.colors.textSecondary,
     fontWeight: '600',
     marginTop: 4,
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   prSectionTitle: {
-    fontSize: 18,
+    fontSize: rfs(18),
     fontWeight: '700',
     color: theme.colors.text,
     marginBottom: 12,
@@ -259,19 +259,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   prEmoji: {
-    fontSize: 24,
+    fontSize: rfs(24),
     marginRight: 12,
   },
   prInfo: {
     flex: 1,
   },
   prExercise: {
-    fontSize: 15,
+    fontSize: rfs(15),
     fontWeight: '700',
     color: '#92400e',
   },
   prDetail: {
-    fontSize: 13,
+    fontSize: rfs(13),
     color: '#a16207',
     marginTop: 2,
   },
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   ratingTitle: {
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '600',
     color: theme.colors.textSecondary,
     marginBottom: 12,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   starText: {
-    fontSize: 36,
+    fontSize: rfs(36),
     color: '#e2e8f0',
   },
   starActive: {
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   doneText: {
-    fontSize: 18,
+    fontSize: rfs(18),
     fontWeight: '700',
     color: '#000',
   },

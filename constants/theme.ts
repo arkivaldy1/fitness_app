@@ -1,3 +1,14 @@
+import { Dimensions } from 'react-native';
+
+// Responsive font size: scales relative to 375pt baseline, clamped 70%-130%
+const BASE_WIDTH = 375;
+const screenWidth = Dimensions.get('window').width;
+export const rfs = (size: number): number => {
+  const scale = screenWidth / BASE_WIDTH;
+  const clamped = Math.min(1.3, Math.max(0.7, scale));
+  return Math.round(size * clamped);
+};
+
 // Design tokens for the app
 
 export const colors = {

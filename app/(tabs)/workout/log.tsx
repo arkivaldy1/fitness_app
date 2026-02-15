@@ -9,9 +9,21 @@ import { Button, Card, ProgressBar, GradientBackground } from '../../../componen
 import { useWorkoutStore, useCurrentExercise, useWorkoutProgress, useAuthStore } from '../../../stores';
 import { SEED_EXERCISES } from '../../../constants/exercises';
 import { calculateVolume } from '../../../lib/analytics';
+import { rfs } from '../../../constants/theme';
 import type { Exercise } from '../../../types';
+import type { PRRecord } from '../../../stores/workoutStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const getVolumeComparison = (volumeKg: number): { emoji: string; label: string } => {
+  if (volumeKg < 100) return { emoji: '🐕', label: 'a large dog' };
+  if (volumeKg < 500) return { emoji: '🎹', label: 'a grand piano' };
+  if (volumeKg < 1000) return { emoji: '🐴', label: 'a horse' };
+  if (volumeKg < 2000) return { emoji: '🚗', label: 'a car' };
+  if (volumeKg < 5000) return { emoji: '🐘', label: 'an elephant' };
+  if (volumeKg < 10000) return { emoji: '🚚', label: 'a truck' };
+  return { emoji: '🚌', label: 'a school bus' };
+};
 
 export default function WorkoutLogScreen() {
   const router = useRouter();
@@ -35,6 +47,26 @@ export default function WorkoutLogScreen() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [isRestTimerMinimized, setIsRestTimerMinimized] = useState(false);
+  const [showPrCelebration, setShowPrCelebration] = useState(false);
+  const [celebratedPr, setCelebratedPr] = useState<PRRecord | null>(null);
+  const [showFinishOverlay, setShowFinishOverlay] = useState(false);
+  const [finishStats, setFinishStats] = useState<{ volume: number; prCount: number } | null>(null);
+  const prevPrCountRef = useRef(0);
+
+  // Watch for new PRs
+  useEffect(() => {
+    if (!activeSession) {
+      prevPrCountRef.current = 0;
+      return;
+    }
+    const currentCount = activeSession.prsHit.length;
+    if (currentCount > prevPrCountRef.current && currentCount > 0) {
+      const latestPr = activeSession.prsHit[currentCount - 1];
+      setCelebratedPr(latestPr);
+      setShowPrCelebration(true);
+    }
+    prevPrCountRef.current = currentCount;
+  }, [activeSession?.prsHit.length]);
 
   // Timer for rest countdown
   useEffect(() => {
@@ -114,14 +146,26 @@ export default function WorkoutLogScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Finish',
-          onPress: async () => {
-            await finishWorkout();
+          onPress: () => {
+            // Calculate stats for the finish overlay
+            const session = useWorkoutStore.getState().activeSession;
+            if (!session) return;
+            const allSets = session.exercises.flatMap((e) => e.completedSets);
+            const volume = calculateVolume(allSets);
+            const prCount = session.prsHit.length;
+            setFinishStats({ volume, prCount });
+            setShowFinishOverlay(true);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            router.replace('/(tabs)/workout/summary');
           },
         },
       ]
     );
+  };
+
+  const handleFinishOverlayDismiss = async () => {
+    await finishWorkout();
+    setShowFinishOverlay(false);
+    router.replace('/(tabs)/workout/summary');
   };
 
   const handleCancel = () => {
@@ -520,6 +564,61 @@ export default function WorkoutLogScreen() {
           </Pressable>
         )}
 
+        {/* Full-Screen PR Celebration Overlay */}
+        {showPrCelebration && celebratedPr && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowPrCelebration(false)}
+          >
+            <LinearGradient
+              colors={['rgba(250, 204, 21, 0.97)', 'rgba(245, 158, 11, 0.97)']}
+              style={styles.prOverlay}
+            >
+              <Text style={styles.prOverlayEmoji}>🏆</Text>
+              <Text style={styles.prOverlayTitle}>NEW PR!</Text>
+              <Text style={styles.prOverlayExercise}>{celebratedPr.exerciseName}</Text>
+              <Text style={styles.prOverlayDetail}>
+                {celebratedPr.type === 'weight'
+                  ? `${celebratedPr.value} kg — New max weight!`
+                  : `${celebratedPr.value} reps — New max reps!`}
+              </Text>
+              <Text style={styles.prOverlayHint}>Tap anywhere to continue</Text>
+            </LinearGradient>
+          </Pressable>
+        )}
+
+        {/* Full-Screen Motivational Finish Overlay */}
+        {showFinishOverlay && finishStats && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={handleFinishOverlayDismiss}
+          >
+            <LinearGradient
+              colors={['rgba(4, 120, 87, 0.97)', 'rgba(5, 150, 105, 0.97)']}
+              style={styles.finishOverlay}
+            >
+              <Text style={styles.finishOverlayEmoji}>
+                {getVolumeComparison(finishStats.volume).emoji}
+              </Text>
+              <Text style={styles.finishOverlayTitle}>WORKOUT COMPLETE!</Text>
+              <Text style={styles.finishOverlayVolume}>
+                {finishStats.volume.toLocaleString()} kg
+              </Text>
+              <Text style={styles.finishOverlayComparison}>
+                That's the weight of {getVolumeComparison(finishStats.volume).label}!
+              </Text>
+              {finishStats.prCount > 0 && (
+                <View style={styles.finishOverlayPrBadge}>
+                  <Text style={styles.finishOverlayPrText}>
+                    🏆 {finishStats.prCount} PR{finishStats.prCount > 1 ? 's' : ''} hit today!
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.finishOverlayHint}>Tap anywhere to continue</Text>
+            </LinearGradient>
+          </Pressable>
+        )}
+
         {/* Add Exercise Overlay */}
         <Modal
           visible={showExercisePicker}
@@ -597,7 +696,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     color: '#ef4444',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '600',
   },
   headerCenter: {
@@ -605,7 +704,7 @@ const styles = StyleSheet.create({
   },
   workoutName: {
     color: '#0f172a',
-    fontSize: 18,
+    fontSize: rfs(18),
     fontWeight: '700',
   },
   timerBadge: {
@@ -617,13 +716,13 @@ const styles = StyleSheet.create({
   },
   timerText: {
     color: '#059669',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   finishButton: {
     color: '#059669',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '700',
   },
   progressContainer: {
@@ -642,7 +741,7 @@ const styles = StyleSheet.create({
   },
   progressText: {
     color: '#64748b',
-    fontSize: 13,
+    fontSize: rfs(13),
     textAlign: 'center',
     marginTop: 6,
   },
@@ -662,19 +761,19 @@ const styles = StyleSheet.create({
   },
   miniRestLabel: {
     color: '#000',
-    fontSize: 12,
+    fontSize: rfs(12),
     fontWeight: '700',
     letterSpacing: 1,
   },
   miniRestTime: {
     color: '#000',
-    fontSize: 18,
+    fontSize: rfs(18),
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
   miniRestSkip: {
     color: 'rgba(0,0,0,0.6)',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '600',
   },
   // Scrollable Tab Bar
@@ -705,12 +804,12 @@ const styles = StyleSheet.create({
   },
   tabPillText: {
     color: '#64748b',
-    fontSize: 13,
+    fontSize: rfs(13),
     fontWeight: '600',
   },
   tabPillActiveText: {
     color: '#000',
-    fontSize: 13,
+    fontSize: rfs(13),
     fontWeight: '700',
   },
   tabPillCompleteText: {
@@ -727,7 +826,7 @@ const styles = StyleSheet.create({
   },
   tabPillAddText: {
     color: '#059669',
-    fontSize: 13,
+    fontSize: rfs(13),
     fontWeight: '700',
   },
   content: {
@@ -750,25 +849,27 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   completeCheckmark: {
-    fontSize: 40,
+    fontSize: rfs(40),
     color: '#000',
   },
   completeTitle: {
-    fontSize: 24,
+    fontSize: rfs(24),
     fontWeight: '800',
     color: '#0f172a',
     marginBottom: 8,
+    textAlign: 'center',
   },
   completeSubtitle: {
-    fontSize: 16,
+    fontSize: rfs(16),
     color: '#64748b',
     marginBottom: 24,
+    textAlign: 'center',
   },
   completedSets: {
     marginTop: 24,
   },
   completedTitle: {
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '700',
     color: '#0f172a',
     marginBottom: 12,
@@ -794,17 +895,17 @@ const styles = StyleSheet.create({
   },
   setNumberText: {
     color: '#000',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '700',
   },
   setDetails: {
     color: '#0f172a',
-    fontSize: 15,
+    fontSize: rfs(15),
     fontWeight: '500',
   },
   skippedText: {
     color: '#94a3b8',
-    fontSize: 15,
+    fontSize: rfs(15),
     fontStyle: 'italic',
   },
   volumeRow: {
@@ -818,12 +919,12 @@ const styles = StyleSheet.create({
   },
   volumeLabel: {
     color: '#64748b',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '600',
   },
   volumeValue: {
     color: '#059669',
-    fontSize: 15,
+    fontSize: rfs(15),
     fontWeight: '700',
   },
   // Full-Screen Rest Timer Overlay
@@ -835,14 +936,14 @@ const styles = StyleSheet.create({
   },
   restOverlayLabel: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '700',
     letterSpacing: 4,
     marginBottom: 8,
   },
   restOverlayTime: {
     color: '#fff',
-    fontSize: 80,
+    fontSize: rfs(80),
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
     marginBottom: 24,
@@ -861,7 +962,7 @@ const styles = StyleSheet.create({
   },
   restOverlayExercise: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '600',
     marginBottom: 32,
   },
@@ -874,12 +975,101 @@ const styles = StyleSheet.create({
   },
   restOverlaySkipText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '700',
   },
   restOverlayHint: {
     color: 'rgba(255,255,255,0.4)',
-    fontSize: 13,
+    fontSize: rfs(13),
+    fontWeight: '500',
+  },
+  // PR Celebration Overlay
+  prOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  prOverlayEmoji: {
+    fontSize: rfs(80),
+    marginBottom: 16,
+  },
+  prOverlayTitle: {
+    color: '#000',
+    fontSize: rfs(36),
+    fontWeight: '900',
+    letterSpacing: 2,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  prOverlayExercise: {
+    color: 'rgba(0,0,0,0.7)',
+    fontSize: rfs(20),
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  prOverlayDetail: {
+    color: 'rgba(0,0,0,0.6)',
+    fontSize: rfs(16),
+    fontWeight: '600',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  prOverlayHint: {
+    color: 'rgba(0,0,0,0.3)',
+    fontSize: rfs(13),
+    fontWeight: '500',
+  },
+  // Motivational Finish Overlay
+  finishOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  finishOverlayEmoji: {
+    fontSize: rfs(80),
+    marginBottom: 16,
+  },
+  finishOverlayTitle: {
+    color: '#fff',
+    fontSize: rfs(32),
+    fontWeight: '900',
+    letterSpacing: 2,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  finishOverlayVolume: {
+    color: '#4CFCAD',
+    fontSize: rfs(48),
+    fontWeight: '900',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  finishOverlayComparison: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: rfs(18),
+    fontWeight: '600',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  finishOverlayPrBadge: {
+    backgroundColor: 'rgba(250, 204, 21, 0.3)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  finishOverlayPrText: {
+    color: '#fef08a',
+    fontSize: rfs(16),
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  finishOverlayHint: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: rfs(13),
     fontWeight: '500',
   },
   // Exercise Picker Styles
@@ -890,13 +1080,13 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(76, 252, 173, 0.2)',
   },
   pickerTitle: {
-    fontSize: 24,
+    fontSize: rfs(24),
     fontWeight: '800',
     color: '#0f172a',
     marginBottom: 4,
   },
   pickerSubtitle: {
-    fontSize: 15,
+    fontSize: rfs(15),
     color: '#64748b',
   },
   exerciseList: {
@@ -920,7 +1110,7 @@ const styles = StyleSheet.create({
   },
   exerciseName: {
     color: '#0f172a',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '600',
     marginBottom: 6,
   },
@@ -936,7 +1126,7 @@ const styles = StyleSheet.create({
   },
   tagText: {
     color: '#059669',
-    fontSize: 12,
+    fontSize: rfs(12),
     fontWeight: '600',
   },
   tagSecondary: {
@@ -944,7 +1134,7 @@ const styles = StyleSheet.create({
   },
   tagTextSecondary: {
     color: '#0891b2',
-    fontSize: 12,
+    fontSize: rfs(12),
     fontWeight: '600',
   },
   addButton: {
@@ -962,7 +1152,7 @@ const styles = StyleSheet.create({
   },
   exerciseItemName: {
     color: '#0f172a',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '600',
     marginBottom: 6,
   },
@@ -981,12 +1171,12 @@ const styles = StyleSheet.create({
   },
   modalClose: {
     color: '#ef4444',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '600',
   },
   modalTitle: {
     color: '#0f172a',
-    fontSize: 18,
+    fontSize: rfs(18),
     fontWeight: '700',
   },
 });

@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, FlatList } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Card, Button } from '../ui';
+import { rfs } from '../../constants/theme';
 import type { SetLog, WeightUnit } from '../../types';
-
-const WEIGHT_VALUES = [0, 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25, 27.5, 30, 32.5, 35, 37.5, 40, 42.5, 45, 47.5, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
-const REPS_VALUES = Array.from({ length: 30 }, (_, i) => i + 1);
 
 interface SetLoggerProps {
   exerciseName: string;
@@ -22,136 +20,6 @@ interface SetLoggerProps {
   onExerciseNameLongPress?: () => void;
   prAchieved?: boolean;
 }
-
-const PillPicker: React.FC<{
-  values: number[];
-  selected: number;
-  onSelect: (value: number) => void;
-  formatLabel?: (value: number) => string;
-  onFineTuneMinus: () => void;
-  onFineTunePlus: () => void;
-}> = ({ values, selected, onSelect, formatLabel, onFineTuneMinus, onFineTunePlus }) => {
-  const flatListRef = useRef<FlatList>(null);
-
-  const scrollToSelected = useCallback(() => {
-    const idx = values.indexOf(selected);
-    // If exact value isn't in the list, find the closest
-    const closestIdx = idx >= 0 ? idx : values.reduce((best, v, i) =>
-      Math.abs(v - selected) < Math.abs(values[best] - selected) ? i : best, 0);
-    if (closestIdx >= 0 && flatListRef.current) {
-      flatListRef.current.scrollToIndex({ index: closestIdx, animated: true, viewPosition: 0.5 });
-    }
-  }, [selected, values]);
-
-  useEffect(() => {
-    // Small delay to ensure FlatList is laid out
-    const timeout = setTimeout(scrollToSelected, 100);
-    return () => clearTimeout(timeout);
-  }, [scrollToSelected]);
-
-  const renderPill = useCallback(({ item }: { item: number }) => {
-    const isSelected = item === selected;
-    const label = formatLabel ? formatLabel(item) : `${item}`;
-    return (
-      <TouchableOpacity
-        onPress={() => {
-          onSelect(item);
-          Haptics.selectionAsync();
-        }}
-        activeOpacity={0.7}
-      >
-        {isSelected ? (
-          <LinearGradient
-            colors={['#4CFCAD', '#4CD0FC']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={pillStyles.pillSelected}
-          >
-            <Text style={pillStyles.pillTextSelected}>{label}</Text>
-          </LinearGradient>
-        ) : (
-          <View style={pillStyles.pill}>
-            <Text style={pillStyles.pillText}>{label}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }, [selected, onSelect, formatLabel]);
-
-  return (
-    <View style={pillStyles.container}>
-      <TouchableOpacity style={pillStyles.fineButton} onPress={onFineTuneMinus}>
-        <Text style={pillStyles.fineButtonText}>-</Text>
-      </TouchableOpacity>
-      <FlatList
-        ref={flatListRef}
-        data={values}
-        renderItem={renderPill}
-        keyExtractor={(item) => `${item}`}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={pillStyles.listContent}
-        getItemLayout={(_, index) => ({ length: 56, offset: 56 * index, index })}
-        onScrollToIndexFailed={() => {}}
-      />
-      <TouchableOpacity style={pillStyles.fineButton} onPress={onFineTunePlus}>
-        <Text style={pillStyles.fineButtonText}>+</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
-
-const pillStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  fineButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fineButtonText: {
-    color: '#0f172a',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  listContent: {
-    paddingHorizontal: 4,
-    gap: 6,
-    alignItems: 'center',
-  },
-  pill: {
-    height: 38,
-    minWidth: 50,
-    paddingHorizontal: 12,
-    borderRadius: 19,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillSelected: {
-    height: 38,
-    minWidth: 50,
-    paddingHorizontal: 12,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillText: {
-    color: '#64748b',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  pillTextSelected: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
 
 export const SetLogger: React.FC<SetLoggerProps> = ({
   exerciseName,
@@ -169,6 +37,8 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
 }) => {
   const [weight, setWeight] = useState(defaultWeight);
   const [reps, setReps] = useState(defaultReps);
+  const [weightText, setWeightText] = useState(String(defaultWeight));
+  const [repsText, setRepsText] = useState(String(defaultReps));
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [rpe, setRpe] = useState<number | null>(null);
   const [isWarmup, setIsWarmup] = useState(false);
@@ -176,7 +46,57 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
   useEffect(() => {
     setWeight(defaultWeight);
     setReps(defaultReps);
+    setWeightText(String(defaultWeight));
+    setRepsText(String(defaultReps));
   }, [defaultWeight, defaultReps]);
+
+  const updateWeight = (val: number) => {
+    const clamped = Math.max(0, val);
+    setWeight(clamped);
+    setWeightText(String(clamped));
+  };
+
+  const updateReps = (val: number) => {
+    const clamped = Math.max(1, Math.round(val));
+    setReps(clamped);
+    setRepsText(String(clamped));
+  };
+
+  const handleWeightTextChange = (text: string) => {
+    setWeightText(text);
+    const parsed = parseFloat(text);
+    if (!isNaN(parsed) && parsed >= 0) {
+      setWeight(parsed);
+    }
+  };
+
+  const handleWeightBlur = () => {
+    const parsed = parseFloat(weightText);
+    if (isNaN(parsed) || parsed < 0) {
+      setWeightText(String(weight));
+    } else {
+      setWeight(parsed);
+      setWeightText(String(parsed));
+    }
+  };
+
+  const handleRepsTextChange = (text: string) => {
+    setRepsText(text);
+    const parsed = parseInt(text, 10);
+    if (!isNaN(parsed) && parsed >= 1) {
+      setReps(parsed);
+    }
+  };
+
+  const handleRepsBlur = () => {
+    const parsed = parseInt(repsText, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setRepsText(String(reps));
+    } else {
+      setReps(parsed);
+      setRepsText(String(parsed));
+    }
+  };
 
   const handleLogSet = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -192,17 +112,17 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
     <View style={styles.container}>
       {/* Exercise Name Card */}
       <Card gradient elevated style={styles.exerciseCard}>
-        <View style={styles.exerciseHeader}>
-          <Pressable onLongPress={onExerciseNameLongPress}>
-            <Text style={styles.exerciseName}>{exerciseName}</Text>
-          </Pressable>
+        <Pressable onLongPress={onExerciseNameLongPress}>
+          <Text style={styles.exerciseName} numberOfLines={2}>{exerciseName}</Text>
+        </Pressable>
+        <View style={styles.badgeTargetRow}>
           <View style={styles.setBadge}>
             <Text style={styles.setBadgeText}>
-              {currentSetNumber}/{targetSets}
+              Set {currentSetNumber}/{targetSets}
             </Text>
           </View>
+          <Text style={styles.targetText}>Target: {targetReps} reps</Text>
         </View>
-        <Text style={styles.targetText}>Target: {targetReps} reps</Text>
         {lastSessionSet && (
           <View style={styles.lastSession}>
             <Text style={styles.lastLabel}>Last time: </Text>
@@ -226,36 +146,67 @@ export const SetLogger: React.FC<SetLoggerProps> = ({
         </LinearGradient>
       )}
 
-      {/* Input Section - Scrollable Pickers */}
+      {/* Input Section - TextInput with Steppers */}
       <Card style={styles.inputCard} elevated>
-        <View style={styles.pickerSection}>
-          <View style={styles.pickerRow}>
+        <View style={styles.inputRow}>
+          {/* Weight Group */}
+          <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>WEIGHT ({weightUnit})</Text>
-            <Text style={styles.selectedValue}>{weight}</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={styles.stepperButton}
+                onPress={() => { updateWeight(weight - 2.5); Haptics.selectionAsync(); }}
+              >
+                <Text style={styles.stepperButtonText}>-</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.numberInput}
+                value={weightText}
+                onChangeText={handleWeightTextChange}
+                onBlur={handleWeightBlur}
+                keyboardType="decimal-pad"
+                selectTextOnFocus
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={styles.stepperButton}
+                onPress={() => { updateWeight(weight + 2.5); Haptics.selectionAsync(); }}
+              >
+                <Text style={styles.stepperButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <PillPicker
-            values={WEIGHT_VALUES}
-            selected={weight}
-            onSelect={setWeight}
-            onFineTuneMinus={() => setWeight(Math.max(0, weight - 2.5))}
-            onFineTunePlus={() => setWeight(weight + 2.5)}
-          />
-        </View>
 
-        <View style={styles.pickerDivider} />
+          {/* Vertical Divider */}
+          <View style={styles.verticalDivider} />
 
-        <View style={styles.pickerSection}>
-          <View style={styles.pickerRow}>
+          {/* Reps Group */}
+          <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>REPS</Text>
-            <Text style={styles.selectedValue}>{reps}</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity
+                style={styles.stepperButton}
+                onPress={() => { updateReps(reps - 1); Haptics.selectionAsync(); }}
+              >
+                <Text style={styles.stepperButtonText}>-</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.numberInput}
+                value={repsText}
+                onChangeText={handleRepsTextChange}
+                onBlur={handleRepsBlur}
+                keyboardType="number-pad"
+                selectTextOnFocus
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={styles.stepperButton}
+                onPress={() => { updateReps(reps + 1); Haptics.selectionAsync(); }}
+              >
+                <Text style={styles.stepperButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <PillPicker
-            values={REPS_VALUES}
-            selected={reps}
-            onSelect={setReps}
-            onFineTuneMinus={() => setReps(Math.max(1, reps - 1))}
-            onFineTunePlus={() => setReps(reps + 1)}
-          />
         </View>
 
         {/* Advanced Toggle */}
@@ -343,32 +294,31 @@ const styles = StyleSheet.create({
   exerciseCard: {
     padding: 20,
   },
-  exerciseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   exerciseName: {
     color: '#000',
-    fontSize: 22,
+    fontSize: rfs(22),
     fontWeight: '800',
-    flex: 1,
+    marginBottom: 8,
+  },
+  badgeTargetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   setBadge: {
     backgroundColor: 'rgba(0,0,0,0.15)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
   setBadgeText: {
     color: '#000',
-    fontSize: 14,
+    fontSize: rfs(13),
     fontWeight: '700',
   },
   targetText: {
     color: 'rgba(0,0,0,0.6)',
-    fontSize: 15,
+    fontSize: rfs(14),
     fontWeight: '500',
   },
   lastSession: {
@@ -383,11 +333,11 @@ const styles = StyleSheet.create({
   },
   lastLabel: {
     color: 'rgba(0,0,0,0.5)',
-    fontSize: 13,
+    fontSize: rfs(13),
   },
   lastValue: {
     color: '#000',
-    fontSize: 13,
+    fontSize: rfs(13),
     fontWeight: '600',
   },
   prBanner: {
@@ -399,40 +349,66 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   prBannerEmoji: {
-    fontSize: 20,
+    fontSize: rfs(20),
   },
   prBannerText: {
     color: '#000',
-    fontSize: 16,
+    fontSize: rfs(16),
     fontWeight: '800',
     letterSpacing: 1,
   },
   inputCard: {
     padding: 16,
   },
-  pickerSection: {
-    gap: 8,
-  },
-  pickerRow: {
+  inputRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  inputGroup: {
+    flex: 1,
     alignItems: 'center',
+    gap: 8,
   },
   inputLabel: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: rfs(11),
     fontWeight: '700',
     letterSpacing: 1,
   },
-  selectedValue: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '800',
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  pickerDivider: {
-    height: 1,
+  stepperButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonText: {
+    color: '#0f172a',
+    fontSize: rfs(20),
+    fontWeight: '600',
+  },
+  numberInput: {
+    width: 72,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    textAlign: 'center',
+    fontSize: rfs(20),
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  verticalDivider: {
+    width: 1,
+    height: 60,
     backgroundColor: '#e2e8f0',
-    marginVertical: 12,
+    marginHorizontal: 8,
+    alignSelf: 'center',
   },
   advancedToggle: {
     alignItems: 'center',
@@ -441,7 +417,7 @@ const styles = StyleSheet.create({
   },
   advancedToggleText: {
     color: '#64748b',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '500',
   },
   advancedSection: {
@@ -457,7 +433,7 @@ const styles = StyleSheet.create({
   },
   rpeLabel: {
     color: '#64748b',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '600',
   },
   rpeButtons: {
@@ -477,7 +453,7 @@ const styles = StyleSheet.create({
   },
   rpeButtonText: {
     color: '#64748b',
-    fontSize: 15,
+    fontSize: rfs(15),
     fontWeight: '600',
   },
   rpeButtonTextActive: {
@@ -508,7 +484,7 @@ const styles = StyleSheet.create({
   },
   warmupLabel: {
     color: '#64748b',
-    fontSize: 15,
+    fontSize: rfs(15),
   },
   actions: {
     gap: 12,
@@ -523,7 +499,7 @@ const styles = StyleSheet.create({
   },
   skipText: {
     color: '#94a3b8',
-    fontSize: 15,
+    fontSize: rfs(15),
     fontWeight: '500',
   },
   quickButton: {
@@ -537,7 +513,7 @@ const styles = StyleSheet.create({
   },
   quickText: {
     color: '#059669',
-    fontSize: 14,
+    fontSize: rfs(14),
     fontWeight: '600',
   },
 });
