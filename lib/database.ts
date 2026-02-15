@@ -688,6 +688,62 @@ export const getWeeklyStats = async (
   };
 };
 
+// Weekly volume trend
+export const getWeeklyVolumeTrend = async (
+  userId: string,
+  weeks: number = 8
+): Promise<{ weekStart: string; volume: number; sessions: number }[]> => {
+  const database = await getDatabase();
+
+  // Calculate the start date (N weeks ago, aligned to Monday)
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const thisMonday = new Date(now);
+  thisMonday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  thisMonday.setHours(0, 0, 0, 0);
+
+  const startDate = new Date(thisMonday);
+  startDate.setDate(thisMonday.getDate() - (weeks - 1) * 7);
+  const startDateStr = startDate.toISOString().split('T')[0];
+
+  const rows = await database.getAllAsync<{
+    week_start: string;
+    total_volume: number;
+    session_count: number;
+  }>(
+    `SELECT
+       date(ws.started_at, 'weekday 1', '-7 days') as week_start,
+       COALESCE(SUM(sl.weight * sl.reps), 0) as total_volume,
+       COUNT(DISTINCT ws.id) as session_count
+     FROM workout_sessions ws
+     LEFT JOIN set_logs sl ON sl.workout_session_id = ws.id
+       AND sl.is_warmup = 0 AND sl.skipped = 0
+     WHERE ws.user_id = ?
+       AND ws.completed_at IS NOT NULL
+       AND date(ws.started_at) >= ?
+     GROUP BY week_start
+     ORDER BY week_start ASC`,
+    [userId, startDateStr]
+  );
+
+  // Build complete array with zeros for missing weeks
+  const result: { weekStart: string; volume: number; sessions: number }[] = [];
+  for (let i = 0; i < weeks; i++) {
+    const weekDate = new Date(startDate);
+    weekDate.setDate(startDate.getDate() + i * 7);
+    const weekStr = weekDate.toISOString().split('T')[0];
+
+    const match = rows.find((r) => r.week_start === weekStr);
+    result.push({
+      weekStart: weekStr,
+      volume: Math.round(match?.total_volume ?? 0),
+      sessions: match?.session_count ?? 0,
+    });
+  }
+
+  return result;
+};
+
 // Nutrition queries
 export const getOrCreateNutritionDay = async (
   userId: string,

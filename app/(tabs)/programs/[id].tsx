@@ -6,6 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Card, Button, GradientBackground } from '../../../components/ui';
 import { getProgramWithWorkouts, deleteProgram } from '../../../lib/programs';
 import { getWorkoutTemplateWithExercises } from '../../../lib/database';
+import { useWorkoutStore } from '../../../stores/workoutStore';
+import { useAuthStore } from '../../../stores/authStore';
 
 interface ProgramDetail {
   id: string;
@@ -48,6 +50,8 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default function ProgramDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuthStore();
+  const { activeSession, startWorkout } = useWorkoutStore();
   const [program, setProgram] = useState<ProgramDetail | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [workoutDetails, setWorkoutDetails] = useState<Record<string, WorkoutDetail>>({});
@@ -113,6 +117,24 @@ export default function ProgramDetailScreen() {
     );
   };
 
+  const handleStartWorkout = async (workoutId: string) => {
+    if (!user) return;
+    if (activeSession) {
+      Alert.alert(
+        'Active Workout',
+        'You already have a workout in progress. Please finish or cancel it first.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    try {
+      await startWorkout(workoutId, user.id);
+      router.push('/(tabs)/workout/log');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to start workout');
+    }
+  };
+
   if (loading || !program) {
     return (
       <GradientBackground variant="full">
@@ -175,13 +197,13 @@ export default function ProgramDetailScreen() {
               const details = workoutDetails[workout.id];
 
               return (
-                <TouchableOpacity
-                  key={workout.id}
-                  activeOpacity={0.7}
-                  onPress={() => toggleWorkout(workout.id)}
-                >
-                  <Card style={styles.workoutCard} elevated>
-                    <View style={styles.workoutHeader}>
+                <Card key={workout.id} style={styles.workoutCard} elevated>
+                  <View style={styles.workoutHeader}>
+                    <TouchableOpacity
+                      style={styles.workoutHeaderLeft}
+                      activeOpacity={0.7}
+                      onPress={() => toggleWorkout(workout.id)}
+                    >
                       <View style={styles.workoutIndex}>
                         <Text style={styles.workoutIndexText}>{index + 1}</Text>
                       </View>
@@ -194,33 +216,40 @@ export default function ProgramDetailScreen() {
                         </Text>
                       </View>
                       <Text style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</Text>
-                    </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.startButton}
+                      activeOpacity={0.7}
+                      onPress={() => handleStartWorkout(workout.id)}
+                    >
+                      <Text style={styles.startButtonText}>Start</Text>
+                    </TouchableOpacity>
+                  </View>
 
-                    {isExpanded && details && (
-                      <View style={styles.exerciseList}>
-                        {details.exercises.map((exercise, i) => (
-                          <View key={exercise.id} style={styles.exerciseItem}>
-                            <View style={styles.exerciseNumber}>
-                              <Text style={styles.exerciseNumberText}>{i + 1}</Text>
-                            </View>
-                            <View style={styles.exerciseInfo}>
-                              <Text style={styles.exerciseName}>
-                                {exercise.exercise?.name || 'Unknown Exercise'}
-                              </Text>
-                              <Text style={styles.exerciseDetails}>
-                                {exercise.target_sets} × {exercise.target_reps}
-                                {exercise.rest_seconds > 0 && ` · ${exercise.rest_seconds}s rest`}
-                              </Text>
-                              {exercise.notes && (
-                                <Text style={styles.exerciseNotes}>{exercise.notes}</Text>
-                              )}
-                            </View>
+                  {isExpanded && details && (
+                    <View style={styles.exerciseList}>
+                      {details.exercises.map((exercise, i) => (
+                        <View key={exercise.id} style={styles.exerciseItem}>
+                          <View style={styles.exerciseNumber}>
+                            <Text style={styles.exerciseNumberText}>{i + 1}</Text>
                           </View>
-                        ))}
-                      </View>
-                    )}
-                  </Card>
-                </TouchableOpacity>
+                          <View style={styles.exerciseInfo}>
+                            <Text style={styles.exerciseName}>
+                              {exercise.exercise?.name || 'Unknown Exercise'}
+                            </Text>
+                            <Text style={styles.exerciseDetails}>
+                              {exercise.target_sets} × {exercise.target_reps}
+                              {exercise.rest_seconds > 0 && ` · ${exercise.rest_seconds}s rest`}
+                            </Text>
+                            {exercise.notes && (
+                              <Text style={styles.exerciseNotes}>{exercise.notes}</Text>
+                            )}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </Card>
               );
             })}
           </View>
@@ -240,16 +269,6 @@ export default function ProgramDetailScreen() {
             </View>
           )}
 
-          {/* Start Workout Button */}
-          <Button
-            title="Start Workout from Program"
-            onPress={() => {
-              Alert.alert('Coming Soon', 'Starting workouts from programs will be available soon!');
-            }}
-            variant="gradient"
-            size="lg"
-            fullWidth
-          />
         </ScrollView>
       </SafeAreaView>
     </GradientBackground>
@@ -361,6 +380,23 @@ const styles = StyleSheet.create({
   workoutHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  workoutHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  startButton: {
+    backgroundColor: '#4CFCAD',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  startButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#000',
   },
   workoutIndex: {
     width: 36,

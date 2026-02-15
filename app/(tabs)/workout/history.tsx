@@ -2,8 +2,9 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '../../../components/ui';
+import WeeklyVolumeChart from '../../../components/charts/WeeklyVolumeChart';
 import { useAuthStore } from '../../../stores';
-import { getRecentWorkoutSessions, getSetLogsForSession, getWeeklyStats } from '../../../lib/database';
+import { getRecentWorkoutSessions, getSetLogsForSession, getWeeklyStats, getWeeklyVolumeTrend } from '../../../lib/database';
 import { formatDuration, compareWeeks } from '../../../lib/analytics';
 import { theme } from '../../../constants/theme';
 import type { WorkoutSession, SetLog } from '../../../types';
@@ -22,10 +23,12 @@ export default function WorkoutHistoryScreen() {
     lastWeek: { sessions: number; volume: number; duration: number };
     changes: { volumeChange: number; durationChange: number; sessionsChange: number };
   } | null>(null);
+  const [volumeTrend, setVolumeTrend] = useState<{ label: string; value: number }[]>([]);
 
   useEffect(() => {
     loadSessions();
     loadWeeklyComparison();
+    loadVolumeTrend();
   }, []);
 
   const loadSessions = async () => {
@@ -67,6 +70,22 @@ export default function WorkoutHistoryScreen() {
       });
     } catch (e) {
       console.warn('Failed to load weekly comparison:', e);
+    }
+  };
+
+  const loadVolumeTrend = async () => {
+    if (!user) return;
+    try {
+      const trend = await getWeeklyVolumeTrend(user.id, 8);
+      setVolumeTrend(
+        trend.map((w) => {
+          const d = new Date(w.weekStart);
+          const label = `${d.getMonth() + 1}/${d.getDate()}`;
+          return { label, value: w.volume };
+        })
+      );
+    } catch (e) {
+      console.warn('Failed to load volume trend:', e);
     }
   };
 
@@ -243,7 +262,16 @@ export default function WorkoutHistoryScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={renderWeekComparison}
+        ListHeaderComponent={
+          <View>
+            {volumeTrend.length >= 2 && (
+              <Card style={styles.volumeChartCard}>
+                <WeeklyVolumeChart data={volumeTrend} />
+              </Card>
+            )}
+            {renderWeekComparison()}
+          </View>
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyText}>No workouts yet</Text>
@@ -375,6 +403,11 @@ const styles = StyleSheet.create({
   expandedSetText: {
     fontSize: 13,
     color: theme.colors.textSecondary,
+  },
+  // Volume trend chart
+  volumeChartCard: {
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
   },
   // Week comparison card
   weekCard: {
