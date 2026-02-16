@@ -241,6 +241,17 @@ export interface WaterLog {
   logged_at: string;
 }
 
+// Body Weight
+export interface BodyWeightLog {
+  id: UUID;
+  user_id: UUID;
+  date: string;
+  weight_kg: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Sync types
 export interface SyncOperation {
   id: UUID;

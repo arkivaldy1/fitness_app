@@ -112,6 +112,17 @@ export default function ProfileScreen() {
               value="Configure"
               onPress={() => router.push('/(tabs)/nutrition/targets')}
             />
+
+            <SettingsItem
+              icon="⚖️"
+              label="Body Weight"
+              value={profile?.weight_kg
+                ? `${profile.weight_unit === 'lb'
+                    ? (profile.weight_kg * 2.20462).toFixed(1)
+                    : profile.weight_kg.toFixed(1)} ${profile.weight_unit || 'kg'}`
+                : 'Track'}
+              onPress={() => router.push('/(tabs)/profile/weight')}
+            />
           </View>
 
           {/* Data */}

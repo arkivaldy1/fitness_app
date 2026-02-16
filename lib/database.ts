@@ -11,6 +11,7 @@ import type {
   NutritionEntry,
   WaterLog,
   MealTemplate,
+  BodyWeightLog,
   SyncOperation,
 } from '../types';
 
@@ -197,6 +198,19 @@ export const initializeDatabase = async (): Promise<void> => {
       synced INTEGER DEFAULT 0
     );
 
+    -- Body weight logs
+    CREATE TABLE IF NOT EXISTS body_weight_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      weight_kg REAL NOT NULL,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      synced INTEGER DEFAULT 0,
+      UNIQUE(user_id, date)
+    );
+
     -- Sync queue
     CREATE TABLE IF NOT EXISTS sync_queue (
       id TEXT PRIMARY KEY,
@@ -225,6 +239,7 @@ export const initializeDatabase = async (): Promise<void> => {
     CREATE INDEX IF NOT EXISTS idx_nutrition_days_date ON nutrition_days(date);
     CREATE INDEX IF NOT EXISTS idx_nutrition_entries_day ON nutrition_entries(nutrition_day_id);
     CREATE INDEX IF NOT EXISTS idx_water_logs_date ON water_logs(date);
+    CREATE INDEX IF NOT EXISTS idx_body_weight_logs_user_date ON body_weight_logs(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at);
   `);
 
@@ -841,6 +856,93 @@ export const getWaterForDay = async (userId: string, date: string): Promise<numb
   return result?.total || 0;
 };
 
+// Body weight queries
+export const logBodyWeight = async (
+  userId: string,
+  date: string,
+  weightKg: number,
+  notes?: string
+): Promise<string> => {
+  const database = await getDatabase();
+  const now = new Date().toISOString();
+
+  // Check if entry exists for this date
+  const existing = await database.getFirstAsync<{ id: string }>(
+    'SELECT id FROM body_weight_logs WHERE user_id = ? AND date = ?',
+    [userId, date]
+  );
+
+  if (existing) {
+    await database.runAsync(
+      'UPDATE body_weight_logs SET weight_kg = ?, notes = ?, updated_at = ? WHERE id = ?',
+      [weightKg, notes || null, now, existing.id]
+    );
+    await addToSyncQueue('update', 'body_weight_logs', existing.id, {
+      weight_kg: weightKg,
+      notes,
+      updated_at: now,
+    });
+    return existing.id;
+  }
+
+  const id = await generateUUID();
+  await database.runAsync(
+    'INSERT INTO body_weight_logs (id, user_id, date, weight_kg, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, userId, date, weightKg, notes || null, now, now]
+  );
+  await addToSyncQueue('insert', 'body_weight_logs', id, {
+    user_id: userId,
+    date,
+    weight_kg: weightKg,
+    notes,
+  });
+  return id;
+};
+
+export const getBodyWeightForDate = async (
+  userId: string,
+  date: string
+): Promise<BodyWeightLog | null> => {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM body_weight_logs WHERE user_id = ? AND date = ?',
+    [userId, date]
+  );
+  return row ? mapRowToBodyWeightLog(row) : null;
+};
+
+export const getBodyWeightHistory = async (
+  userId: string,
+  days: number = 30
+): Promise<BodyWeightLog[]> => {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM body_weight_logs
+     WHERE user_id = ?
+     AND date >= date('now', '-' || ? || ' days')
+     ORDER BY date ASC`,
+    [userId, days]
+  );
+  return rows.map(mapRowToBodyWeightLog);
+};
+
+export const getBodyWeightFirst = async (
+  userId: string
+): Promise<BodyWeightLog | null> => {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM body_weight_logs WHERE user_id = ? ORDER BY date ASC LIMIT 1',
+    [userId]
+  );
+  return row ? mapRowToBodyWeightLog(row) : null;
+};
+
+export const deleteBodyWeightLog = async (id: string): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM body_weight_logs WHERE id = ?', [id]);
+  await addToSyncQueue('delete', 'body_weight_logs', id, {});
+};
+
 // Sync queue
 export const addToSyncQueue = async (
   type: 'insert' | 'update' | 'delete',
@@ -1014,5 +1116,17 @@ function mapRowToNutritionEntry(row: Record<string, unknown>): NutritionEntry {
     water_ml: row.water_ml as number,
     meal_template_id: row.meal_template_id as string | null,
     logged_at: row.logged_at as string,
+  };
+}
+
+function mapRowToBodyWeightLog(row: Record<string, unknown>): BodyWeightLog {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    date: row.date as string,
+    weight_kg: row.weight_kg as number,
+    notes: row.notes as string | null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
   };
 }

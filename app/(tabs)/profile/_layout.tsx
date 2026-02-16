@@ -23,6 +23,12 @@ export default function ProfileLayout() {
           title: 'Profile',
         }}
       />
+      <Stack.Screen
+        name="weight"
+        options={{
+          title: 'Body Weight',
+        }}
+      />
     </Stack>
   );
 }

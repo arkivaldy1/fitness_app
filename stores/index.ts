@@ -7,3 +7,4 @@ export {
   calculateTDEE,
   calculateMacros,
 } from './nutritionStore';
+export { useWeightStore } from './weightStore';
