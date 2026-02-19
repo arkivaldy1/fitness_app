@@ -6,13 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Card, GradientBackground } from '../../../components/ui';
 import { useAuthStore } from '../../../stores';
-import { getUserPrograms, deleteProgram, type SavedProgram } from '../../../lib/programs';
+import { getUserPrograms, deleteProgram, saveTemplateProgram, type SavedProgram } from '../../../lib/programs';
+import { PROGRAM_TEMPLATES } from '../../../constants/programTemplates';
 
 export default function ProgramsScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [programs, setPrograms] = useState<SavedProgram[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingTemplate, setSavingTemplate] = useState<string | null>(null);
 
   const loadPrograms = useCallback(async () => {
     if (!user) return;
@@ -52,6 +54,24 @@ export default function ProgramsScreen() {
         },
       ]
     );
+  };
+
+  const handleUseTemplate = async (templateKey: string) => {
+    if (!user || savingTemplate) return;
+    const template = PROGRAM_TEMPLATES.find((t) => t.key === templateKey);
+    if (!template) return;
+
+    setSavingTemplate(templateKey);
+    try {
+      const programId = await saveTemplateProgram(user.id, template);
+      await loadPrograms();
+      router.push({ pathname: '/(tabs)/programs/[id]', params: { id: programId } });
+    } catch (err) {
+      Alert.alert('Error', 'Failed to create program. Please try again.');
+      console.error('Failed to save template program:', err);
+    } finally {
+      setSavingTemplate(null);
+    }
   };
 
   return (
@@ -119,32 +139,41 @@ export default function ProgramsScreen() {
 
             <TemplateCard
               name="Push / Pull / Legs"
+              templateKey="ppl"
               emoji="💪"
               days="6 days/week"
               level="Intermediate"
               description="Classic bodybuilding split targeting each movement pattern twice per week"
               color1="#4CFCAD"
               color2="#4CD0FC"
+              saving={savingTemplate === 'ppl'}
+              onPress={() => handleUseTemplate('ppl')}
             />
 
             <TemplateCard
               name="Upper / Lower"
+              templateKey="upper_lower"
               emoji="⚡"
               days="4 days/week"
               level="Beginner-Intermediate"
               description="Balanced split for building strength and muscle with adequate recovery"
               color1="#4CD0FC"
               color2="#a78bfa"
+              saving={savingTemplate === 'upper_lower'}
+              onPress={() => handleUseTemplate('upper_lower')}
             />
 
             <TemplateCard
               name="Full Body"
+              templateKey="full_body"
               emoji="🔥"
               days="3 days/week"
               level="Beginner"
               description="Hit every muscle group each session for maximum efficiency"
               color1="#f59e0b"
               color2="#4CFCAD"
+              saving={savingTemplate === 'full_body'}
+              onPress={() => handleUseTemplate('full_body')}
             />
           </View>
         </ScrollView>
@@ -200,16 +229,19 @@ const ProgramCard = ({ program, onPress, onLongPress }: {
   </TouchableOpacity>
 );
 
-const TemplateCard = ({ name, emoji, days, level, description, color1, color2 }: {
+const TemplateCard = ({ name, templateKey, emoji, days, level, description, color1, color2, saving, onPress }: {
   name: string;
+  templateKey: string;
   emoji: string;
   days: string;
   level: string;
   description: string;
   color1: string;
   color2: string;
+  saving: boolean;
+  onPress: () => void;
 }) => (
-  <TouchableOpacity activeOpacity={0.7} style={styles.templateWrapper}>
+  <TouchableOpacity activeOpacity={0.7} style={styles.templateWrapper} onPress={onPress} disabled={saving}>
     <LinearGradient
       colors={[`${color1}15`, `${color2}15`]}
       start={{ x: 0, y: 0 }}
@@ -228,7 +260,9 @@ const TemplateCard = ({ name, emoji, days, level, description, color1, color2 }:
       <Text style={styles.templateName}>{name}</Text>
       <Text style={styles.templateDescription}>{description}</Text>
       <View style={styles.templateFooter}>
-        <Text style={[styles.comingSoon, { color: color1 }]}>Coming Soon</Text>
+        <Text style={[styles.useTemplate, { color: color1 }]}>
+          {saving ? 'Creating...' : 'Use Template →'}
+        </Text>
       </View>
     </LinearGradient>
   </TouchableOpacity>
@@ -453,8 +487,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  comingSoon: {
-    fontSize: 13,
+  useTemplate: {
+    fontSize: 14,
     fontWeight: '700',
   },
 });

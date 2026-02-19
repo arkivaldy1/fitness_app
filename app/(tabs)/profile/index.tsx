@@ -1,14 +1,52 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Card, Button, GradientBackground } from '../../../components/ui';
 import { useAuthStore } from '../../../stores';
+import { exportAllData, exportAsCSV } from '../../../lib/exportData';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, profile, isOfflineMode, signOut, updateProfile } = useAuthStore();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = () => {
+    Alert.alert('Export Data', 'Choose export format:', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'JSON (Full Backup)',
+        onPress: async () => {
+          if (!user) return;
+          setExporting(true);
+          try {
+            await exportAllData(user.id);
+          } catch (err) {
+            Alert.alert('Error', 'Failed to export data. Please try again.');
+            console.error('Export JSON failed:', err);
+          } finally {
+            setExporting(false);
+          }
+        },
+      },
+      {
+        text: 'CSV (Workouts)',
+        onPress: async () => {
+          if (!user) return;
+          setExporting(true);
+          try {
+            await exportAsCSV(user.id);
+          } catch (err) {
+            Alert.alert('Error', 'Failed to export data. Please try again.');
+            console.error('Export CSV failed:', err);
+          } finally {
+            setExporting(false);
+          }
+        },
+      },
+    ]);
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -139,8 +177,9 @@ export default function ProfileScreen() {
             <SettingsItem
               icon="📤"
               label="Export Data"
-              value="Coming Soon"
-              onPress={() => Alert.alert('Coming Soon', 'Data export will be available in a future update.')}
+              value={exporting ? 'Exporting...' : 'JSON / CSV'}
+              onPress={handleExport}
+              disabled={exporting}
             />
           </View>
 
@@ -193,10 +232,11 @@ interface SettingsItemProps {
   label: string;
   value: string;
   onPress: () => void;
+  disabled?: boolean;
 }
 
-const SettingsItem: React.FC<SettingsItemProps> = ({ icon, label, value, onPress }) => (
-  <TouchableOpacity style={styles.settingsItem} onPress={onPress} activeOpacity={0.7}>
+const SettingsItem: React.FC<SettingsItemProps> = ({ icon, label, value, onPress, disabled }) => (
+  <TouchableOpacity style={[styles.settingsItem, disabled && { opacity: 0.6 }]} onPress={onPress} activeOpacity={0.7} disabled={disabled}>
     <View style={styles.settingsLeft}>
       <Text style={styles.settingsIcon}>{icon}</Text>
       <Text style={styles.settingsLabel}>{label}</Text>

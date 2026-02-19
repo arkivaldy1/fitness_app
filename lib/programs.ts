@@ -7,6 +7,7 @@ import {
   addExerciseToTemplate,
 } from './database';
 import type { GeneratedProgram, ProgramRequest } from './ai';
+import type { ProgramTemplate } from '../constants/programTemplates';
 
 export interface SavedProgram {
   id: string;
@@ -91,6 +92,79 @@ export const saveGeneratedProgram = async (
       const exercise = workout.exercises[j];
 
       // Find or create exercise in database
+      const exerciseId = await findOrCreateExercise(database, exercise.name, userId);
+
+      await addExerciseToTemplate({
+        workout_template_id: templateId,
+        exercise_id: exerciseId,
+        order_index: j,
+        superset_group: null,
+        target_sets: exercise.sets,
+        target_reps: exercise.reps,
+        target_rpe: null,
+        rest_seconds: exercise.restSeconds,
+        tempo: null,
+        notes: exercise.notes || null,
+      });
+    }
+  }
+
+  return programId;
+};
+
+// Save a pre-built program template
+export const saveTemplateProgram = async (
+  userId: string,
+  template: ProgramTemplate
+): Promise<string> => {
+  const database = await getDatabase();
+  const programId = await generateUUID();
+  const now = new Date().toISOString();
+
+  await database.runAsync(
+    `INSERT INTO programs (id, user_id, name, description, weekly_schedule, is_ai_generated, ai_generation_inputs, tips, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+    [
+      programId,
+      userId,
+      template.name,
+      template.description,
+      template.weeklySchedule,
+      JSON.stringify(template.tips),
+      now,
+      now,
+    ]
+  );
+
+  await addToSyncQueue('insert', 'programs', programId, {
+    id: programId,
+    user_id: userId,
+    name: template.name,
+    description: template.description,
+    weekly_schedule: template.weeklySchedule,
+    is_ai_generated: false,
+    tips: template.tips,
+  });
+
+  const dayMap: Record<string, number> = {
+    'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4,
+    'Friday': 5, 'Saturday': 6, 'Sunday': 0,
+  };
+
+  for (let i = 0; i < template.workouts.length; i++) {
+    const workout = template.workouts[i];
+
+    const templateId = await createWorkoutTemplate({
+      user_id: userId,
+      program_id: programId,
+      name: workout.name,
+      day_of_week: workout.dayOfWeek ? (dayMap[workout.dayOfWeek] ?? null) : null,
+      order_index: i,
+      target_duration_minutes: workout.targetDuration,
+    });
+
+    for (let j = 0; j < workout.exercises.length; j++) {
+      const exercise = workout.exercises[j];
       const exerciseId = await findOrCreateExercise(database, exercise.name, userId);
 
       await addExerciseToTemplate({

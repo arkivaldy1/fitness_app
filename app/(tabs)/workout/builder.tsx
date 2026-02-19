@@ -16,7 +16,8 @@ import {
   deleteWorkoutTemplate,
 } from '../../../lib/database';
 import { theme } from '../../../constants/theme';
-import type { Exercise } from '../../../types';
+import { MUSCLE_GROUPS, EQUIPMENT } from '../../../constants/exercises';
+import type { Exercise, MuscleGroup, Equipment } from '../../../types';
 
 interface WorkoutExercise {
   id: string;
@@ -45,6 +46,8 @@ export default function WorkoutBuilderScreen() {
   const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoaded, setIsLoaded] = useState(!isEditing);
+  const [filterMuscle, setFilterMuscle] = useState<MuscleGroup | null>(null);
+  const [filterEquipment, setFilterEquipment] = useState<Equipment | null>(null);
 
   // Config state
   const [configSets, setConfigSets] = useState(3);
@@ -60,12 +63,21 @@ export default function WorkoutBuilderScreen() {
   }, []);
 
   useEffect(() => {
+    let result = allExercises;
+
     if (searchQuery) {
-      searchExercises(searchQuery).then(setFilteredExercises);
-    } else {
-      setFilteredExercises(allExercises);
+      const q = searchQuery.toLowerCase();
+      result = result.filter((e) => e.name.toLowerCase().includes(q));
     }
-  }, [searchQuery, allExercises]);
+    if (filterMuscle) {
+      result = result.filter((e) => e.primary_muscle === filterMuscle);
+    }
+    if (filterEquipment) {
+      result = result.filter((e) => e.equipment === filterEquipment);
+    }
+
+    setFilteredExercises(result);
+  }, [searchQuery, allExercises, filterMuscle, filterEquipment]);
 
   const loadExercises = async () => {
     const exercises = await getAllExercises();
@@ -340,7 +352,12 @@ export default function WorkoutBuilderScreen() {
       <Modal visible={showExercisePicker} animationType="slide">
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowExercisePicker(false)}>
+            <TouchableOpacity onPress={() => {
+              setShowExercisePicker(false);
+              setFilterMuscle(null);
+              setFilterEquipment(null);
+              setSearchQuery('');
+            }}>
               <Text style={styles.modalCancel}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Add Exercise</Text>
@@ -356,6 +373,46 @@ export default function WorkoutBuilderScreen() {
               placeholderTextColor={theme.colors.textMuted}
               autoFocus
             />
+          </View>
+
+          {/* Filter Chips */}
+          <View style={styles.filterSection}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+              {/* Muscle group filters */}
+              {MUSCLE_GROUPS.map((mg) => (
+                <TouchableOpacity
+                  key={mg.value}
+                  style={[styles.filterChip, filterMuscle === mg.value && styles.filterChipActive]}
+                  onPress={() => setFilterMuscle(filterMuscle === mg.value ? null : mg.value)}
+                >
+                  <Text style={[styles.filterChipText, filterMuscle === mg.value && styles.filterChipTextActive]}>
+                    {mg.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+              {/* Equipment filters */}
+              {EQUIPMENT.filter((e) => e.value !== 'other').map((eq) => (
+                <TouchableOpacity
+                  key={eq.value}
+                  style={[styles.filterChip, filterEquipment === eq.value && styles.filterChipActive]}
+                  onPress={() => setFilterEquipment(filterEquipment === eq.value ? null : eq.value)}
+                >
+                  <Text style={[styles.filterChipText, filterEquipment === eq.value && styles.filterChipTextActive]}>
+                    {eq.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {(filterMuscle || filterEquipment) && (
+              <TouchableOpacity
+                style={styles.clearFilters}
+                onPress={() => { setFilterMuscle(null); setFilterEquipment(null); }}
+              >
+                <Text style={styles.clearFiltersText}>Clear filters ({filteredExercises.length} results)</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ExerciseList
@@ -520,6 +577,46 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     color: theme.colors.text,
     fontSize: 16,
+  },
+  filterSection: {
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  filterRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  filterChipTextActive: {
+    color: '#fff',
+  },
+  clearFilters: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  clearFiltersText: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '600',
   },
   configOverlay: {
     flex: 1,
