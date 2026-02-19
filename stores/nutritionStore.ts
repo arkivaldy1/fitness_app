@@ -4,6 +4,8 @@ import {
   getOrCreateNutritionDay,
   getNutritionEntriesForDay,
   addNutritionEntry,
+  deleteNutritionEntry,
+  updateNutritionEntry,
   logWater,
   getWaterForDay,
   getSetting,
@@ -32,6 +34,8 @@ interface NutritionState {
   loadDay: (userId: string, date?: string) => Promise<void>;
   setDate: (date: string) => void;
   addEntry: (entry: Omit<NutritionEntry, 'id' | 'logged_at' | 'nutrition_day_id'>) => Promise<void>;
+  deleteEntry: (entryId: string) => Promise<void>;
+  updateEntry: (entryId: string, fields: { label?: string | null; calories?: number; protein?: number | null; carbs?: number | null; fat?: number | null }) => Promise<void>;
   addWater: (userId: string, amountMl: number) => Promise<void>;
   loadTargets: (userId: string) => Promise<void>;
   updateTargets: (userId: string, targets: Omit<NutritionTargets, 'id' | 'user_id' | 'is_active' | 'created_at'>) => Promise<void>;
@@ -126,6 +130,30 @@ export const useNutritionStore = create<NutritionState>((set, get) => ({
       entries: newEntries,
       totals: newTotals,
     });
+  },
+
+  deleteEntry: async (entryId: string) => {
+    const { entries, waterTotal } = get();
+
+    await deleteNutritionEntry(entryId);
+
+    const newEntries = entries.filter((e) => e.id !== entryId);
+    const newTotals = calculateTotals(newEntries, waterTotal);
+
+    set({ entries: newEntries, totals: newTotals });
+  },
+
+  updateEntry: async (entryId: string, fields) => {
+    const { entries, waterTotal } = get();
+
+    await updateNutritionEntry(entryId, fields);
+
+    const newEntries = entries.map((e) =>
+      e.id === entryId ? { ...e, ...fields } : e
+    );
+    const newTotals = calculateTotals(newEntries, waterTotal);
+
+    set({ entries: newEntries, totals: newTotals });
   },
 
   addWater: async (userId: string, amountMl: number) => {

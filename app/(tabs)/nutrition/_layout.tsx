@@ -31,6 +31,19 @@ export default function NutritionLayout() {
         }}
       />
       <Stack.Screen
+        name="edit"
+        options={{
+          title: 'Edit Entry',
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="analytics"
+        options={{
+          title: 'Nutrition Trends',
+        }}
+      />
+      <Stack.Screen
         name="targets"
         options={{
           title: 'Set Targets',

@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Card, Button, GradientBackground } from '../../../components/ui';
 import { useAuthStore, useWorkoutStore } from '../../../stores';
-import { getWorkoutTemplates, getRecentWorkoutSessions } from '../../../lib/database';
+import { getWorkoutTemplates, getRecentWorkoutSessions, deleteWorkoutTemplate } from '../../../lib/database';
 import { theme } from '../../../constants/theme';
 import type { WorkoutTemplate, WorkoutSession } from '../../../types';
 
@@ -48,6 +48,31 @@ export default function WorkoutScreen() {
     if (!user) return;
     await startQuickWorkout('Quick Workout', user.id);
     router.push('/(tabs)/workout/log');
+  };
+
+  const handleEditTemplate = (template: WorkoutTemplate) => {
+    router.push({
+      pathname: '/(tabs)/workout/builder' as any,
+      params: { templateId: template.id },
+    });
+  };
+
+  const handleDeleteTemplate = (template: WorkoutTemplate) => {
+    Alert.alert(
+      'Delete Workout',
+      `Delete "${template.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteWorkoutTemplate(template.id);
+            await loadData();
+          },
+        },
+      ]
+    );
   };
 
   // If there's an active session, show resume option
@@ -161,6 +186,7 @@ export default function WorkoutScreen() {
                     key={template.id}
                     style={styles.templateCard}
                     onPress={() => handleStartWorkout(template.id)}
+                    onLongPress={() => handleDeleteTemplate(template)}
                     activeOpacity={0.7}
                   >
                     <LinearGradient
@@ -179,12 +205,25 @@ export default function WorkoutScreen() {
                           </Text>
                         )}
                       </View>
-                      <View style={styles.playButton}>
-                        <Text style={styles.playIcon}>▶</Text>
+                      <View style={styles.templateActions}>
+                        <TouchableOpacity
+                          style={styles.editButton}
+                          onPress={() => handleEditTemplate(template)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.editIcon}>✎</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.playButton}
+                          onPress={() => handleStartWorkout(template.id)}
+                        >
+                          <Text style={styles.playIcon}>▶</Text>
+                        </TouchableOpacity>
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
                 ))}
+                <Text style={styles.templateHint}>Long press to delete</Text>
               </View>
             )}
           </View>
@@ -416,6 +455,23 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 2,
   },
+  templateActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  editButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(76, 252, 173, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editIcon: {
+    color: '#059669',
+    fontSize: 16,
+  },
   playButton: {
     width: 40,
     height: 40,
@@ -428,6 +484,12 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 14,
     marginLeft: 2,
+  },
+  templateHint: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 4,
   },
   sessionList: {
     gap: 8,

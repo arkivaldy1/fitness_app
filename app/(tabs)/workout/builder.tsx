@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, TouchableWithoutFeedback, Keyboard } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, TouchableWithoutFeedback, Keyboard, Alert } from 'react-native';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Input, NumericInput } from '../../../components/ui';
 import { ExerciseList, ExerciseCard } from '../../../components/workout/ExerciseList';
 import { useAuthStore } from '../../../stores';
-import { getAllExercises, searchExercises, createWorkoutTemplate, addExerciseToTemplate } from '../../../lib/database';
+import {
+  getAllExercises,
+  searchExercises,
+  createWorkoutTemplate,
+  addExerciseToTemplate,
+  getWorkoutTemplateWithExercises,
+  updateWorkoutTemplate,
+  replaceTemplateExercises,
+  deleteWorkoutTemplate,
+} from '../../../lib/database';
 import { theme } from '../../../constants/theme';
 import type { Exercise } from '../../../types';
 
@@ -19,17 +28,23 @@ interface WorkoutExercise {
 
 export default function WorkoutBuilderScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ templateId?: string }>();
   const { user, profile } = useAuthStore();
+
+  const isEditing = !!params.templateId;
 
   const [workoutName, setWorkoutName] = useState('');
   const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showExerciseConfig, setShowExerciseConfig] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredExercises, setFilteredExercises] = useState<Exercise[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(!isEditing);
 
   // Config state
   const [configSets, setConfigSets] = useState(3);
@@ -38,6 +53,10 @@ export default function WorkoutBuilderScreen() {
 
   useEffect(() => {
     loadExercises();
+    if (isEditing && params.templateId) {
+      loadTemplate(params.templateId);
+      navigation.setOptions({ title: 'Edit Workout' });
+    }
   }, []);
 
   useEffect(() => {
@@ -54,8 +73,40 @@ export default function WorkoutBuilderScreen() {
     setFilteredExercises(exercises);
   };
 
+  const loadTemplate = async (templateId: string) => {
+    const data = await getWorkoutTemplateWithExercises(templateId);
+    if (!data) return;
+
+    setWorkoutName(data.name);
+    setExercises(
+      data.exercises.map((te) => ({
+        id: `${te.exercise_id}_${te.order_index}`,
+        exercise: {
+          id: te.exercise_id,
+          name: te.exercise?.name || 'Unknown',
+          primary_muscle: (te.exercise?.primary_muscle || 'chest') as Exercise['primary_muscle'],
+          secondary_muscles: null,
+          equipment: (te.exercise?.equipment || 'barbell') as Exercise['equipment'],
+          movement_pattern: null,
+          is_compound: te.exercise?.is_compound || false,
+          is_unilateral: false,
+          instructions: null,
+          video_url: null,
+          is_system: true,
+          user_id: null,
+          created_at: '',
+        },
+        sets: te.target_sets,
+        reps: te.target_reps,
+        restSeconds: te.rest_seconds,
+      }))
+    );
+    setIsLoaded(true);
+  };
+
   const handleSelectExercise = (exercise: Exercise) => {
     setSelectedExercise(exercise);
+    setEditingExerciseId(null);
     setShowExercisePicker(false);
     setShowExerciseConfig(true);
 
@@ -71,20 +122,42 @@ export default function WorkoutBuilderScreen() {
     setConfigReps('8-12');
   };
 
+  const handleEditExercise = (ex: WorkoutExercise) => {
+    setSelectedExercise(ex.exercise);
+    setEditingExerciseId(ex.id);
+    setConfigSets(ex.sets);
+    setConfigReps(ex.reps);
+    setConfigRest(ex.restSeconds);
+    setShowExerciseConfig(true);
+  };
+
   const handleAddExercise = () => {
     if (!selectedExercise) return;
 
-    const newExercise: WorkoutExercise = {
-      id: `${selectedExercise.id}_${Date.now()}`,
-      exercise: selectedExercise,
-      sets: configSets,
-      reps: configReps,
-      restSeconds: configRest,
-    };
+    if (editingExerciseId) {
+      // Update existing exercise
+      setExercises(
+        exercises.map((e) =>
+          e.id === editingExerciseId
+            ? { ...e, sets: configSets, reps: configReps, restSeconds: configRest }
+            : e
+        )
+      );
+    } else {
+      // Add new exercise
+      const newExercise: WorkoutExercise = {
+        id: `${selectedExercise.id}_${Date.now()}`,
+        exercise: selectedExercise,
+        sets: configSets,
+        reps: configReps,
+        restSeconds: configRest,
+      };
+      setExercises([...exercises, newExercise]);
+    }
 
-    setExercises([...exercises, newExercise]);
     setShowExerciseConfig(false);
     setSelectedExercise(null);
+    setEditingExerciseId(null);
     setSearchQuery('');
   };
 
@@ -108,29 +181,49 @@ export default function WorkoutBuilderScreen() {
     setIsSaving(true);
 
     try {
-      const templateId = await createWorkoutTemplate({
-        user_id: user.id,
-        program_id: null,
-        name: workoutName.trim(),
-        day_of_week: null,
-        order_index: 0,
-        target_duration_minutes: null,
-      });
-
-      for (let i = 0; i < exercises.length; i++) {
-        const ex = exercises[i];
-        await addExerciseToTemplate({
-          workout_template_id: templateId,
-          exercise_id: ex.exercise.id,
-          order_index: i,
-          superset_group: null,
-          target_sets: ex.sets,
-          target_reps: ex.reps,
-          target_rpe: null,
-          rest_seconds: ex.restSeconds,
-          tempo: null,
-          notes: null,
+      if (isEditing && params.templateId) {
+        // Update existing template
+        await updateWorkoutTemplate(params.templateId, { name: workoutName.trim() });
+        await replaceTemplateExercises(
+          params.templateId,
+          exercises.map((ex, i) => ({
+            exercise_id: ex.exercise.id,
+            order_index: i,
+            superset_group: null,
+            target_sets: ex.sets,
+            target_reps: ex.reps,
+            target_rpe: null,
+            rest_seconds: ex.restSeconds,
+            tempo: null,
+            notes: null,
+          }))
+        );
+      } else {
+        // Create new template
+        const templateId = await createWorkoutTemplate({
+          user_id: user.id,
+          program_id: null,
+          name: workoutName.trim(),
+          day_of_week: null,
+          order_index: 0,
+          target_duration_minutes: null,
         });
+
+        for (let i = 0; i < exercises.length; i++) {
+          const ex = exercises[i];
+          await addExerciseToTemplate({
+            workout_template_id: templateId,
+            exercise_id: ex.exercise.id,
+            order_index: i,
+            superset_group: null,
+            target_sets: ex.sets,
+            target_reps: ex.reps,
+            target_rpe: null,
+            rest_seconds: ex.restSeconds,
+            tempo: null,
+            notes: null,
+          });
+        }
       }
 
       router.back();
@@ -141,7 +234,37 @@ export default function WorkoutBuilderScreen() {
     }
   };
 
+  const handleDelete = () => {
+    if (!params.templateId) return;
+
+    Alert.alert(
+      'Delete Workout',
+      `Are you sure you want to delete "${workoutName}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteWorkoutTemplate(params.templateId!);
+            router.back();
+          },
+        },
+      ]
+    );
+  };
+
   const canSave = workoutName.trim() && exercises.length > 0;
+
+  if (!isLoaded) {
+    return (
+      <SafeAreaView style={styles.container} edges={[]}>
+        <View style={styles.loading}>
+          <Text style={styles.loadingText}>Loading workout...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
@@ -174,6 +297,7 @@ export default function WorkoutBuilderScreen() {
               orderIndex={index}
               onRemove={() => handleRemoveExercise(ex.id)}
               onReorder={(direction) => handleReorder(index, direction)}
+              onPress={() => handleEditExercise(ex)}
             />
           ))}
 
@@ -184,11 +308,25 @@ export default function WorkoutBuilderScreen() {
             fullWidth
           />
         </View>
+
+        {/* Delete button for edit mode */}
+        {isEditing && (
+          <View style={styles.deleteSection}>
+            <Button
+              title="Delete Workout"
+              onPress={handleDelete}
+              variant="outline"
+              fullWidth
+              style={styles.deleteButton}
+              textStyle={styles.deleteButtonText}
+            />
+          </View>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
         <Button
-          title="Save Workout"
+          title={isEditing ? 'Save Changes' : 'Save Workout'}
           onPress={handleSave}
           variant="primary"
           size="lg"
@@ -269,12 +407,15 @@ export default function WorkoutBuilderScreen() {
               <View style={styles.configActions}>
                 <Button
                   title="Cancel"
-                  onPress={() => setShowExerciseConfig(false)}
+                  onPress={() => {
+                    setShowExerciseConfig(false);
+                    setEditingExerciseId(null);
+                  }}
                   variant="ghost"
                   style={{ flex: 1 }}
                 />
                 <Button
-                  title="Add"
+                  title={editingExerciseId ? 'Update' : 'Add'}
                   onPress={handleAddExercise}
                   variant="primary"
                   style={{ flex: 1 }}
@@ -320,6 +461,24 @@ const styles = StyleSheet.create({
   exerciseCount: {
     fontSize: 14,
     color: theme.colors.textMuted,
+  },
+  deleteSection: {
+    marginTop: theme.spacing.xl,
+  },
+  deleteButton: {
+    borderColor: theme.colors.error,
+  },
+  deleteButtonText: {
+    color: theme.colors.error,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: theme.colors.textSecondary,
   },
   footer: {
     position: 'absolute',

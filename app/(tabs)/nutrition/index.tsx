@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +20,7 @@ export default function NutritionScreen() {
     loadDay,
     setDate,
     addWater,
+    deleteEntry,
   } = useNutritionStore();
 
   useEffect(() => {
@@ -53,6 +54,35 @@ export default function NutritionScreen() {
     if (user) {
       await addWater(user.id, amount);
     }
+  };
+
+  const handleEditEntry = (entry: typeof entries[0]) => {
+    router.push({
+      pathname: '/(tabs)/nutrition/edit' as any,
+      params: {
+        entryId: entry.id,
+        label: entry.label || '',
+        calories: String(entry.calories),
+        protein: String(entry.protein || 0),
+        carbs: String(entry.carbs || 0),
+        fat: String(entry.fat || 0),
+      },
+    });
+  };
+
+  const handleDeleteEntry = (entry: typeof entries[0]) => {
+    Alert.alert(
+      'Delete Entry',
+      `Delete "${entry.label || 'Food Entry'}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteEntry(entry.id),
+        },
+      ]
+    );
   };
 
   const adherence = calculateAdherence(totals, targets);
@@ -211,6 +241,24 @@ export default function NutritionScreen() {
             </View>
           </Card>
 
+          {/* Analytics Link */}
+          {targets && entries.length > 0 && (
+            <TouchableOpacity
+              style={styles.trendsLink}
+              onPress={() => router.push('/(tabs)/nutrition/analytics' as any)}
+            >
+              <LinearGradient
+                colors={['rgba(76, 252, 173, 0.12)', 'rgba(76, 208, 252, 0.12)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.trendsLinkGradient}
+              >
+                <Text style={styles.trendsLinkText}>View Nutrition Trends</Text>
+                <Text style={styles.trendsLinkArrow}>→</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+
           {/* Food Log */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -229,7 +277,12 @@ export default function NutritionScreen() {
             ) : (
               <View style={styles.entriesList}>
                 {entries.map((entry, index) => (
-                  <TouchableOpacity key={entry.id} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    key={entry.id}
+                    activeOpacity={0.7}
+                    onPress={() => handleEditEntry(entry)}
+                    onLongPress={() => handleDeleteEntry(entry)}
+                  >
                     <LinearGradient
                       colors={index % 2 === 0
                         ? ['rgba(76, 252, 173, 0.08)', 'rgba(76, 208, 252, 0.08)']
@@ -251,6 +304,7 @@ export default function NutritionScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 ))}
+                <Text style={styles.entryHint}>Tap to edit · Long press to delete</Text>
               </View>
             )}
           </View>
@@ -594,6 +648,37 @@ const styles = StyleSheet.create({
   entryKcal: {
     fontSize: 12,
     color: '#64748b',
+  },
+  trendsLink: {
+    marginBottom: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  trendsLinkGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 252, 173, 0.25)',
+  },
+  trendsLinkText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  trendsLinkArrow: {
+    fontSize: 18,
+    color: '#059669',
+    fontWeight: '600',
+  },
+  entryHint: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    marginTop: 8,
   },
   addButtonContainer: {
     position: 'absolute',

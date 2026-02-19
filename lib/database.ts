@@ -385,6 +385,75 @@ export const getWorkoutTemplateWithExercises = async (templateId: string) => {
   };
 };
 
+// Update workout template
+export const updateWorkoutTemplate = async (
+  templateId: string,
+  fields: { name?: string; target_duration_minutes?: number | null }
+): Promise<void> => {
+  const database = await getDatabase();
+  const now = new Date().toISOString();
+  const sets: string[] = ['updated_at = ?'];
+  const values: (string | number | null)[] = [now];
+
+  if (fields.name !== undefined) { sets.push('name = ?'); values.push(fields.name); }
+  if (fields.target_duration_minutes !== undefined) { sets.push('target_duration_minutes = ?'); values.push(fields.target_duration_minutes); }
+
+  values.push(templateId);
+  await database.runAsync(
+    `UPDATE workout_templates SET ${sets.join(', ')} WHERE id = ?`,
+    values
+  );
+  await addToSyncQueue('update', 'workout_templates', templateId, { ...fields, updated_at: now });
+};
+
+// Delete workout template (exercises cascade)
+export const deleteWorkoutTemplate = async (templateId: string): Promise<void> => {
+  const database = await getDatabase();
+  // Enable foreign keys to ensure cascade works
+  await database.execAsync('PRAGMA foreign_keys = ON');
+  await database.runAsync('DELETE FROM workout_templates WHERE id = ?', [templateId]);
+  await addToSyncQueue('delete', 'workout_templates', templateId, {});
+};
+
+// Replace all exercises in a template (delete old, insert new)
+export const replaceTemplateExercises = async (
+  templateId: string,
+  exercises: Omit<WorkoutTemplateExercise, 'id' | 'created_at' | 'workout_template_id'>[]
+): Promise<void> => {
+  const database = await getDatabase();
+
+  // Delete existing exercises
+  await database.runAsync(
+    'DELETE FROM workout_template_exercises WHERE workout_template_id = ?',
+    [templateId]
+  );
+
+  // Insert new exercises
+  for (const ex of exercises) {
+    const id = await generateUUID();
+    await database.runAsync(
+      `INSERT INTO workout_template_exercises
+       (id, workout_template_id, exercise_id, order_index, superset_group, target_sets, target_reps, target_rpe, rest_seconds, tempo, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        templateId,
+        ex.exercise_id,
+        ex.order_index,
+        ex.superset_group || null,
+        ex.target_sets,
+        ex.target_reps,
+        ex.target_rpe || null,
+        ex.rest_seconds,
+        ex.tempo || null,
+        ex.notes || null,
+      ]
+    );
+  }
+
+  await addToSyncQueue('update', 'workout_template_exercises', templateId, { replaced: true });
+};
+
 // Add exercise to workout template
 export const addExerciseToTemplate = async (
   templateExercise: Omit<WorkoutTemplateExercise, 'id' | 'created_at'>
@@ -833,6 +902,115 @@ export const getNutritionEntriesForDay = async (dayId: string): Promise<Nutritio
   return rows.map(mapRowToNutritionEntry);
 };
 
+// Nutrition entry edit/delete
+export const deleteNutritionEntry = async (id: string): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM nutrition_entries WHERE id = ?', [id]);
+  await addToSyncQueue('delete', 'nutrition_entries', id, {});
+};
+
+export const updateNutritionEntry = async (
+  id: string,
+  fields: { label?: string | null; calories?: number; protein?: number | null; carbs?: number | null; fat?: number | null }
+): Promise<void> => {
+  const database = await getDatabase();
+  const sets: string[] = [];
+  const values: (string | number | null)[] = [];
+
+  if (fields.label !== undefined) { sets.push('label = ?'); values.push(fields.label ?? null); }
+  if (fields.calories !== undefined) { sets.push('calories = ?'); values.push(fields.calories); }
+  if (fields.protein !== undefined) { sets.push('protein = ?'); values.push(fields.protein ?? null); }
+  if (fields.carbs !== undefined) { sets.push('carbs = ?'); values.push(fields.carbs ?? null); }
+  if (fields.fat !== undefined) { sets.push('fat = ?'); values.push(fields.fat ?? null); }
+
+  if (sets.length === 0) return;
+  values.push(id);
+
+  await database.runAsync(
+    `UPDATE nutrition_entries SET ${sets.join(', ')} WHERE id = ?`,
+    values as (string | number | null)[]
+  );
+  await addToSyncQueue('update', 'nutrition_entries', id, fields as Record<string, unknown>);
+};
+
+// Meal template CRUD
+export const saveMealTemplate = async (
+  userId: string,
+  name: string,
+  calories: number,
+  protein: number | null,
+  carbs: number | null,
+  fat: number | null
+): Promise<string> => {
+  const database = await getDatabase();
+  const id = await generateUUID();
+
+  await database.runAsync(
+    `INSERT INTO meal_templates (id, user_id, name, calories, protein, carbs, fat, water_ml, is_favorite, use_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)`,
+    [id, userId, name, calories, protein, carbs, fat]
+  );
+
+  await addToSyncQueue('insert', 'meal_templates', id, { user_id: userId, name, calories, protein, carbs, fat });
+  return id;
+};
+
+export const getMealTemplates = async (userId: string): Promise<MealTemplate[]> => {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM meal_templates WHERE user_id = ? ORDER BY use_count DESC, name ASC',
+    [userId]
+  );
+  return rows.map(mapRowToMealTemplate);
+};
+
+export const deleteMealTemplate = async (id: string): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('DELETE FROM meal_templates WHERE id = ?', [id]);
+  await addToSyncQueue('delete', 'meal_templates', id, {});
+};
+
+export const incrementMealTemplateUseCount = async (id: string): Promise<void> => {
+  const database = await getDatabase();
+  await database.runAsync('UPDATE meal_templates SET use_count = use_count + 1 WHERE id = ?', [id]);
+};
+
+// Nutrition history for analytics
+export const getNutritionHistory = async (
+  userId: string,
+  days: number = 7
+): Promise<{ date: string; calories: number; protein: number; carbs: number; fat: number }[]> => {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{
+    date: string;
+    total_calories: number;
+    total_protein: number;
+    total_carbs: number;
+    total_fat: number;
+  }>(
+    `SELECT nd.date,
+       COALESCE(SUM(ne.calories), 0) as total_calories,
+       COALESCE(SUM(ne.protein), 0) as total_protein,
+       COALESCE(SUM(ne.carbs), 0) as total_carbs,
+       COALESCE(SUM(ne.fat), 0) as total_fat
+     FROM nutrition_days nd
+     LEFT JOIN nutrition_entries ne ON ne.nutrition_day_id = nd.id
+     WHERE nd.user_id = ?
+       AND nd.date >= date('now', '-' || ? || ' days')
+     GROUP BY nd.date
+     ORDER BY nd.date ASC`,
+    [userId, days]
+  );
+
+  return rows.map((r) => ({
+    date: r.date,
+    calories: Math.round(r.total_calories),
+    protein: Math.round(r.total_protein),
+    carbs: Math.round(r.total_carbs),
+    fat: Math.round(r.total_fat),
+  }));
+};
+
 // Water logging
 export const logWater = async (userId: string, date: string, amountMl: number): Promise<string> => {
   const database = await getDatabase();
@@ -1116,6 +1294,22 @@ function mapRowToNutritionEntry(row: Record<string, unknown>): NutritionEntry {
     water_ml: row.water_ml as number,
     meal_template_id: row.meal_template_id as string | null,
     logged_at: row.logged_at as string,
+  };
+}
+
+function mapRowToMealTemplate(row: Record<string, unknown>): MealTemplate {
+  return {
+    id: row.id as string,
+    user_id: row.user_id as string,
+    name: row.name as string,
+    calories: row.calories as number,
+    protein: row.protein as number | null,
+    carbs: row.carbs as number | null,
+    fat: row.fat as number | null,
+    water_ml: row.water_ml as number,
+    is_favorite: row.is_favorite === 1,
+    use_count: row.use_count as number,
+    created_at: row.created_at as string,
   };
 }
 
