@@ -14,6 +14,7 @@ import {
   updateWorkoutTemplate,
   replaceTemplateExercises,
   deleteWorkoutTemplate,
+  createCustomExercise,
 } from '../../../lib/database';
 import { theme } from '../../../constants/theme';
 import { MUSCLE_GROUPS, EQUIPMENT } from '../../../constants/exercises';
@@ -48,6 +49,13 @@ export default function WorkoutBuilderScreen() {
   const [isLoaded, setIsLoaded] = useState(!isEditing);
   const [filterMuscle, setFilterMuscle] = useState<MuscleGroup | null>(null);
   const [filterEquipment, setFilterEquipment] = useState<Equipment | null>(null);
+
+  // Create exercise state
+  const [showCreateExercise, setShowCreateExercise] = useState(false);
+  const [newExerciseName, setNewExerciseName] = useState('');
+  const [newExerciseMuscle, setNewExerciseMuscle] = useState<MuscleGroup | null>(null);
+  const [newExerciseEquipment, setNewExerciseEquipment] = useState<Equipment | null>(null);
+  const [isCreatingExercise, setIsCreatingExercise] = useState(false);
 
   // Config state
   const [configSets, setConfigSets] = useState(3);
@@ -114,6 +122,34 @@ export default function WorkoutBuilderScreen() {
       }))
     );
     setIsLoaded(true);
+  };
+
+  const resetCreateForm = () => {
+    setShowCreateExercise(false);
+    setNewExerciseName('');
+    setNewExerciseMuscle(null);
+    setNewExerciseEquipment(null);
+  };
+
+  const handleCreateExercise = async () => {
+    if (!user || !newExerciseName.trim() || !newExerciseMuscle || !newExerciseEquipment) return;
+
+    setIsCreatingExercise(true);
+    try {
+      const exercise = await createCustomExercise(
+        user.id,
+        newExerciseName.trim(),
+        newExerciseMuscle,
+        newExerciseEquipment
+      );
+      setAllExercises((prev) => [...prev, exercise].sort((a, b) => a.name.localeCompare(b.name)));
+      resetCreateForm();
+      handleSelectExercise(exercise);
+    } catch (error) {
+      console.error('Failed to create exercise:', error);
+    } finally {
+      setIsCreatingExercise(false);
+    }
   };
 
   const handleSelectExercise = (exercise: Exercise) => {
@@ -357,6 +393,7 @@ export default function WorkoutBuilderScreen() {
               setFilterMuscle(null);
               setFilterEquipment(null);
               setSearchQuery('');
+              resetCreateForm();
             }}>
               <Text style={styles.modalCancel}>Cancel</Text>
             </TouchableOpacity>
@@ -371,54 +408,127 @@ export default function WorkoutBuilderScreen() {
               onChangeText={setSearchQuery}
               placeholder="Search exercises..."
               placeholderTextColor={theme.colors.textMuted}
-              autoFocus
+              autoFocus={!showCreateExercise}
             />
           </View>
 
-          {/* Filter Chips */}
-          <View style={styles.filterSection}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-              {/* Muscle group filters */}
-              {MUSCLE_GROUPS.map((mg) => (
-                <TouchableOpacity
-                  key={mg.value}
-                  style={[styles.filterChip, filterMuscle === mg.value && styles.filterChipActive]}
-                  onPress={() => setFilterMuscle(filterMuscle === mg.value ? null : mg.value)}
-                >
-                  <Text style={[styles.filterChipText, filterMuscle === mg.value && styles.filterChipTextActive]}>
-                    {mg.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-              {/* Equipment filters */}
-              {EQUIPMENT.filter((e) => e.value !== 'other').map((eq) => (
-                <TouchableOpacity
-                  key={eq.value}
-                  style={[styles.filterChip, filterEquipment === eq.value && styles.filterChipActive]}
-                  onPress={() => setFilterEquipment(filterEquipment === eq.value ? null : eq.value)}
-                >
-                  <Text style={[styles.filterChipText, filterEquipment === eq.value && styles.filterChipTextActive]}>
-                    {eq.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            {(filterMuscle || filterEquipment) && (
-              <TouchableOpacity
-                style={styles.clearFilters}
-                onPress={() => { setFilterMuscle(null); setFilterEquipment(null); }}
-              >
-                <Text style={styles.clearFiltersText}>Clear filters ({filteredExercises.length} results)</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Create Custom Exercise */}
+          {!showCreateExercise ? (
+            <TouchableOpacity
+              style={styles.createExerciseButton}
+              onPress={() => setShowCreateExercise(true)}
+            >
+              <Text style={styles.createExerciseButtonText}>+ Create Custom Exercise</Text>
+            </TouchableOpacity>
+          ) : (
+            <ScrollView style={styles.createExerciseForm} keyboardShouldPersistTaps="handled">
+              <Text style={styles.createExerciseTitle}>New Exercise</Text>
 
-          <ExerciseList
-            exercises={filteredExercises}
-            onSelectExercise={handleSelectExercise}
-          />
+              <TextInput
+                style={styles.createExerciseInput}
+                value={newExerciseName}
+                onChangeText={setNewExerciseName}
+                placeholder="Exercise name"
+                placeholderTextColor={theme.colors.textMuted}
+                autoFocus
+              />
+
+              <Text style={styles.createExerciseLabel}>Muscle Group</Text>
+              <View style={styles.createChipWrap}>
+                {MUSCLE_GROUPS.map((mg) => (
+                  <TouchableOpacity
+                    key={mg.value}
+                    style={[styles.filterChip, newExerciseMuscle === mg.value && styles.filterChipActive]}
+                    onPress={() => setNewExerciseMuscle(mg.value)}
+                  >
+                    <Text style={[styles.filterChipText, newExerciseMuscle === mg.value && styles.filterChipTextActive]}>
+                      {mg.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.createExerciseLabel}>Equipment</Text>
+              <View style={styles.createChipWrap}>
+                {EQUIPMENT.map((eq) => (
+                  <TouchableOpacity
+                    key={eq.value}
+                    style={[styles.filterChip, newExerciseEquipment === eq.value && styles.filterChipActive]}
+                    onPress={() => setNewExerciseEquipment(eq.value)}
+                  >
+                    <Text style={[styles.filterChipText, newExerciseEquipment === eq.value && styles.filterChipTextActive]}>
+                      {eq.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.createExerciseActions}>
+                <TouchableOpacity style={styles.createCancelButton} onPress={resetCreateForm}>
+                  <Text style={styles.createCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.createSaveButton,
+                    (!newExerciseName.trim() || !newExerciseMuscle || !newExerciseEquipment) && styles.createSaveButtonDisabled,
+                  ]}
+                  onPress={handleCreateExercise}
+                  disabled={!newExerciseName.trim() || !newExerciseMuscle || !newExerciseEquipment || isCreatingExercise}
+                >
+                  <Text style={styles.createSaveText}>
+                    {isCreatingExercise ? 'Adding...' : 'Add Exercise'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          )}
+
+          {/* Filter Chips */}
+          {!showCreateExercise && (
+            <View style={styles.filterSection}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {MUSCLE_GROUPS.map((mg) => (
+                  <TouchableOpacity
+                    key={mg.value}
+                    style={[styles.filterChip, filterMuscle === mg.value && styles.filterChipActive]}
+                    onPress={() => setFilterMuscle(filterMuscle === mg.value ? null : mg.value)}
+                  >
+                    <Text style={[styles.filterChipText, filterMuscle === mg.value && styles.filterChipTextActive]}>
+                      {mg.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {EQUIPMENT.filter((e) => e.value !== 'other').map((eq) => (
+                  <TouchableOpacity
+                    key={eq.value}
+                    style={[styles.filterChip, filterEquipment === eq.value && styles.filterChipActive]}
+                    onPress={() => setFilterEquipment(filterEquipment === eq.value ? null : eq.value)}
+                  >
+                    <Text style={[styles.filterChipText, filterEquipment === eq.value && styles.filterChipTextActive]}>
+                      {eq.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              {(filterMuscle || filterEquipment) && (
+                <TouchableOpacity
+                  style={styles.clearFilters}
+                  onPress={() => { setFilterMuscle(null); setFilterEquipment(null); }}
+                >
+                  <Text style={styles.clearFiltersText}>Clear filters ({filteredExercises.length} results)</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {!showCreateExercise && (
+            <ExerciseList
+              exercises={filteredExercises}
+              onSelectExercise={handleSelectExercise}
+            />
+          )}
         </SafeAreaView>
       </Modal>
 
@@ -668,5 +778,87 @@ const styles = StyleSheet.create({
   configActions: {
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  createExerciseButton: {
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#059669',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  createExerciseButtonText: {
+    color: '#059669',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  createExerciseForm: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.md,
+  },
+  createExerciseTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 12,
+  },
+  createExerciseInput: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    color: theme.colors.text,
+    fontSize: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  createExerciseLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  createChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 16,
+  },
+  createExerciseActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  createCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+  },
+  createCancelText: {
+    color: theme.colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  createSaveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+  },
+  createSaveButtonDisabled: {
+    opacity: 0.4,
+  },
+  createSaveText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

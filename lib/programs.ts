@@ -259,7 +259,9 @@ export const getProgramWithWorkouts = async (programId: string) => {
 
   const workouts = await database.getAllAsync<Record<string, unknown>>(
     `SELECT wt.*,
-            (SELECT COUNT(*) FROM workout_template_exercises WHERE workout_template_id = wt.id) as exercise_count
+            (SELECT COUNT(*) FROM workout_template_exercises WHERE workout_template_id = wt.id) as exercise_count,
+            (SELECT COUNT(*) FROM workout_sessions ws WHERE ws.workout_template_id = wt.id AND ws.completed_at IS NOT NULL) as completion_count,
+            (SELECT MAX(ws.completed_at) FROM workout_sessions ws WHERE ws.workout_template_id = wt.id AND ws.completed_at IS NOT NULL) as last_completed_at
      FROM workout_templates wt
      WHERE wt.program_id = ?
      ORDER BY wt.order_index`,
@@ -280,6 +282,8 @@ export const getProgramWithWorkouts = async (programId: string) => {
       day_of_week: w.day_of_week as number | null,
       target_duration_minutes: w.target_duration_minutes as number | null,
       exercise_count: w.exercise_count as number,
+      completion_count: (w.completion_count as number) || 0,
+      last_completed_at: (w.last_completed_at as string) || null,
     })),
   };
 };

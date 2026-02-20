@@ -312,6 +312,49 @@ export const getExerciseById = async (id: string): Promise<Exercise | null> => {
   return row ? mapRowToExercise(row) : null;
 };
 
+// Create custom exercise
+export const createCustomExercise = async (
+  userId: string,
+  name: string,
+  primaryMuscle: Exercise['primary_muscle'],
+  equipment: Exercise['equipment']
+): Promise<Exercise> => {
+  const database = await getDatabase();
+  const id = await generateUUID();
+  const now = new Date().toISOString();
+
+  await database.runAsync(
+    `INSERT INTO exercises (id, name, primary_muscle, equipment, is_system, user_id, created_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?)`,
+    [id, name, primaryMuscle, equipment, userId, now]
+  );
+
+  await addToSyncQueue('insert', 'exercises', id, {
+    id,
+    name,
+    primary_muscle: primaryMuscle,
+    equipment,
+    is_system: false,
+    user_id: userId,
+  });
+
+  return {
+    id,
+    name,
+    primary_muscle: primaryMuscle,
+    secondary_muscles: null,
+    equipment,
+    movement_pattern: null,
+    is_compound: false,
+    is_unilateral: false,
+    instructions: null,
+    video_url: null,
+    is_system: false,
+    user_id: userId,
+    created_at: now,
+  };
+};
+
 // Workout template queries
 export const createWorkoutTemplate = async (
   template: Omit<WorkoutTemplate, 'id' | 'created_at' | 'updated_at'>

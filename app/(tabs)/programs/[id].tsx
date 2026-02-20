@@ -22,6 +22,8 @@ interface ProgramDetail {
     day_of_week: number | null;
     target_duration_minutes: number | null;
     exercise_count: number;
+    completion_count: number;
+    last_completed_at: string | null;
   }[];
 }
 
@@ -46,6 +48,27 @@ interface WorkoutDetail {
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const getWeekStart = (): string => {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1; // Monday = start of week
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString();
+};
+
+const isCompletedThisWeek = (lastCompleted: string | null): boolean => {
+  if (!lastCompleted) return false;
+  return lastCompleted >= getWeekStart();
+};
+
+const formatDate = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  const month = d.toLocaleString('default', { month: 'short' });
+  return `${month} ${d.getDate()}`;
+};
 
 export default function ProgramDetailScreen() {
   const router = useRouter();
@@ -186,6 +209,39 @@ export default function ProgramDetailScreen() {
             )}
           </Card>
 
+          {/* Weekly Progress */}
+          {(() => {
+            const completedThisWeek = program.workouts.filter(
+              (w) => isCompletedThisWeek(w.last_completed_at)
+            ).length;
+            const total = program.workouts.length;
+            return (
+              <Card style={styles.progressCard} elevated>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressTitle}>This Week</Text>
+                  <Text style={styles.progressCount}>
+                    {completedThisWeek}/{total}
+                  </Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: total > 0 ? `${(completedThisWeek / total) * 100}%` : '0%' },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.progressLabel}>
+                  {completedThisWeek === 0
+                    ? 'No workouts completed yet'
+                    : completedThisWeek === total
+                      ? 'All workouts completed!'
+                      : `${total - completedThisWeek} workout${total - completedThisWeek > 1 ? 's' : ''} remaining`}
+                </Text>
+              </Card>
+            );
+          })()}
+
           {/* Workouts */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
@@ -195,6 +251,7 @@ export default function ProgramDetailScreen() {
             {program.workouts.map((workout, index) => {
               const isExpanded = expandedWorkout === workout.id;
               const details = workoutDetails[workout.id];
+              const doneThisWeek = isCompletedThisWeek(workout.last_completed_at);
 
               return (
                 <Card key={workout.id} style={styles.workoutCard} elevated>
@@ -204,8 +261,12 @@ export default function ProgramDetailScreen() {
                       activeOpacity={0.7}
                       onPress={() => toggleWorkout(workout.id)}
                     >
-                      <View style={styles.workoutIndex}>
-                        <Text style={styles.workoutIndexText}>{index + 1}</Text>
+                      <View style={[styles.workoutIndex, doneThisWeek && styles.workoutIndexDone]}>
+                        {doneThisWeek ? (
+                          <Text style={styles.workoutIndexCheckText}>✓</Text>
+                        ) : (
+                          <Text style={styles.workoutIndexText}>{index + 1}</Text>
+                        )}
                       </View>
                       <View style={styles.workoutInfo}>
                         <Text style={styles.workoutName}>{workout.name}</Text>
@@ -214,6 +275,12 @@ export default function ProgramDetailScreen() {
                           {workout.exercise_count} exercises
                           {workout.target_duration_minutes && ` · ~${workout.target_duration_minutes} min`}
                         </Text>
+                        {workout.completion_count > 0 && (
+                          <Text style={styles.workoutCompletionMeta}>
+                            Completed {workout.completion_count} time{workout.completion_count !== 1 ? 's' : ''}
+                            {workout.last_completed_at && ` · Last: ${formatDate(workout.last_completed_at)}`}
+                          </Text>
+                        )}
                       </View>
                       <Text style={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</Text>
                     </TouchableOpacity>
@@ -364,6 +431,42 @@ const styles = StyleSheet.create({
     color: 'rgba(0,0,0,0.6)',
     fontWeight: '500',
   },
+  progressCard: {
+    padding: 16,
+    marginBottom: 24,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  progressTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  progressCount: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: '#059669',
+  },
+  progressLabel: {
+    fontSize: 13,
+    color: '#64748b',
+  },
   section: {
     marginBottom: 24,
   },
@@ -407,10 +510,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  workoutIndexDone: {
+    backgroundColor: '#059669',
+  },
   workoutIndexText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#000',
+  },
+  workoutIndexCheckText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
   workoutInfo: {
     flex: 1,
@@ -424,6 +535,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     marginTop: 2,
+  },
+  workoutCompletionMeta: {
+    fontSize: 12,
+    color: '#059669',
+    marginTop: 2,
+    fontWeight: '500',
   },
   expandIcon: {
     fontSize: 12,
