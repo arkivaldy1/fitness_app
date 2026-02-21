@@ -281,7 +281,6 @@ export default function NutritionScreen() {
                     key={entry.id}
                     activeOpacity={0.7}
                     onPress={() => handleEditEntry(entry)}
-                    onLongPress={() => handleDeleteEntry(entry)}
                   >
                     <LinearGradient
                       colors={index % 2 === 0
@@ -301,10 +300,16 @@ export default function NutritionScreen() {
                         <Text style={styles.entryCalories}>{entry.calories}</Text>
                         <Text style={styles.entryKcal}>kcal</Text>
                       </View>
+                      <TouchableOpacity
+                        style={styles.entryDeleteBtn}
+                        onPress={() => handleDeleteEntry(entry)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.entryDeleteText}>×</Text>
+                      </TouchableOpacity>
                     </LinearGradient>
                   </TouchableOpacity>
                 ))}
-                <Text style={styles.entryHint}>Tap to edit · Long press to delete</Text>
               </View>
             )}
           </View>
@@ -674,11 +679,19 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '600',
   },
-  entryHint: {
-    fontSize: 11,
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginTop: 8,
+  entryDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  entryDeleteText: {
+    color: '#ef4444',
+    fontSize: 18,
+    fontWeight: '600',
   },
   addButtonContainer: {
     position: 'absolute',

@@ -127,7 +127,7 @@ export default function ProgramsScreen() {
                   key={program.id}
                   program={program}
                   onPress={() => router.push({ pathname: '/(tabs)/programs/[id]', params: { id: program.id } })}
-                  onLongPress={() => handleDeleteProgram(program)}
+                  onDelete={() => handleDeleteProgram(program)}
                 />
               ))
             )}
@@ -182,16 +182,15 @@ export default function ProgramsScreen() {
   );
 }
 
-const ProgramCard = ({ program, onPress, onLongPress }: {
+const ProgramCard = ({ program, onPress, onDelete }: {
   program: SavedProgram;
   onPress: () => void;
-  onLongPress: () => void;
+  onDelete: () => void;
 }) => (
   <TouchableOpacity
     activeOpacity={0.7}
     style={styles.programWrapper}
     onPress={onPress}
-    onLongPress={onLongPress}
   >
     <LinearGradient
       colors={['rgba(76, 252, 173, 0.15)', 'rgba(76, 208, 252, 0.15)']}
@@ -215,6 +214,13 @@ const ProgramCard = ({ program, onPress, onLongPress }: {
             <Text style={styles.programSchedule}>{program.weekly_schedule}</Text>
           )}
         </View>
+        <TouchableOpacity
+          style={styles.programDeleteBtn}
+          onPress={onDelete}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.programDeleteText}>×</Text>
+        </TouchableOpacity>
       </View>
       <Text style={styles.programName}>{program.name}</Text>
       {program.description && (
@@ -413,6 +419,20 @@ const styles = StyleSheet.create({
   programSchedule: {
     fontSize: 12,
     color: '#64748b',
+  },
+  programDeleteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  programDeleteText: {
+    color: '#ef4444',
+    fontSize: 18,
+    fontWeight: '600',
   },
   programName: {
     fontSize: 20,

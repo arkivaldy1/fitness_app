@@ -74,7 +74,7 @@ export default function ProgramDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuthStore();
-  const { activeSession, startWorkout } = useWorkoutStore();
+  const { activeSession, startWorkout, cancelWorkout } = useWorkoutStore();
   const [program, setProgram] = useState<ProgramDetail | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [workoutDetails, setWorkoutDetails] = useState<Record<string, WorkoutDetail>>({});
@@ -145,8 +145,27 @@ export default function ProgramDetailScreen() {
     if (activeSession) {
       Alert.alert(
         'Active Workout',
-        'You already have a workout in progress. Please finish or cancel it first.',
-        [{ text: 'OK' }]
+        'You already have a workout in progress.',
+        [
+          {
+            text: 'Resume Current',
+            onPress: () => router.push('/(tabs)/workout/log'),
+          },
+          {
+            text: 'Discard & Start New',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                cancelWorkout();
+                await startWorkout(workoutId, user.id);
+                router.push('/(tabs)/workout/log');
+              } catch (err) {
+                Alert.alert('Error', 'Failed to start workout');
+              }
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
       );
       return;
     }

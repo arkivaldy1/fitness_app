@@ -12,7 +12,7 @@ import type { WorkoutTemplate, WorkoutSession } from '../../../types';
 export default function WorkoutScreen() {
   const router = useRouter();
   const { user, profile } = useAuthStore();
-  const { activeSession, startWorkout, startQuickWorkout } = useWorkoutStore();
+  const { activeSession, startWorkout, startQuickWorkout, cancelWorkout } = useWorkoutStore();
 
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [recentSessions, setRecentSessions] = useState<WorkoutSession[]>([]);
@@ -40,12 +40,58 @@ export default function WorkoutScreen() {
 
   const handleStartWorkout = async (templateId: string) => {
     if (!user) return;
+    if (activeSession) {
+      Alert.alert(
+        'Active Workout',
+        'You already have a workout in progress.',
+        [
+          {
+            text: 'Resume Current',
+            onPress: () => router.push('/(tabs)/workout/log'),
+          },
+          {
+            text: 'Discard & Start New',
+            style: 'destructive',
+            onPress: async () => {
+              cancelWorkout();
+              await startWorkout(templateId, user.id);
+              router.push('/(tabs)/workout/log');
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
     await startWorkout(templateId, user.id);
     router.push('/(tabs)/workout/log');
   };
 
   const handleQuickWorkout = async () => {
     if (!user) return;
+    if (activeSession) {
+      Alert.alert(
+        'Active Workout',
+        'You already have a workout in progress.',
+        [
+          {
+            text: 'Resume Current',
+            onPress: () => router.push('/(tabs)/workout/log'),
+          },
+          {
+            text: 'Discard & Start New',
+            style: 'destructive',
+            onPress: async () => {
+              cancelWorkout();
+              await startQuickWorkout('Quick Workout', user.id);
+              router.push('/(tabs)/workout/log');
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
     await startQuickWorkout('Quick Workout', user.id);
     router.push('/(tabs)/workout/log');
   };
@@ -178,6 +224,12 @@ export default function WorkoutScreen() {
                 <Text style={styles.emptySubtext}>
                   Create a workout template or use Quick Workout to get started
                 </Text>
+                <Button
+                  title="Create Workout"
+                  variant="outline"
+                  onPress={() => router.push('/(tabs)/workout/builder')}
+                  style={{ marginTop: 16 }}
+                />
               </Card>
             ) : (
               <View style={styles.templateList}>
@@ -186,7 +238,6 @@ export default function WorkoutScreen() {
                     key={template.id}
                     style={styles.templateCard}
                     onPress={() => handleStartWorkout(template.id)}
-                    onLongPress={() => handleDeleteTemplate(template)}
                     activeOpacity={0.7}
                   >
                     <LinearGradient
@@ -207,6 +258,13 @@ export default function WorkoutScreen() {
                       </View>
                       <View style={styles.templateActions}>
                         <TouchableOpacity
+                          style={styles.deleteButton}
+                          onPress={() => handleDeleteTemplate(template)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.deleteIcon}>×</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                           style={styles.editButton}
                           onPress={() => handleEditTemplate(template)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -223,7 +281,6 @@ export default function WorkoutScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 ))}
-                <Text style={styles.templateHint}>Long press to delete</Text>
               </View>
             )}
           </View>
@@ -485,11 +542,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 2,
   },
-  templateHint: {
-    fontSize: 11,
-    color: '#94a3b8',
-    textAlign: 'center',
-    marginTop: 4,
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteIcon: {
+    color: '#ef4444',
+    fontSize: 20,
+    fontWeight: '600',
   },
   sessionList: {
     gap: 8,

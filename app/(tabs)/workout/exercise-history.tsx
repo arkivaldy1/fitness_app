@@ -245,12 +245,13 @@ export default function ExerciseHistoryScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>📊</Text>
             <Text style={styles.emptyText}>No history yet</Text>
             <Text style={styles.emptySubtext}>
-              Complete a workout with this exercise to see history
+              Complete a workout with this exercise to start tracking your progress
             </Text>
-          </View>
+          </Card>
         }
       />
     </SafeAreaView>
@@ -348,18 +349,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.text,
   },
-  empty: {
+  emptyCard: {
     alignItems: 'center',
-    paddingVertical: theme.spacing['2xl'],
+    padding: 32,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 12,
   },
   emptyText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: theme.colors.textSecondary,
+    marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
     color: theme.colors.textMuted,
-    marginTop: 4,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

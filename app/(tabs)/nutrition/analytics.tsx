@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Card, GradientBackground } from '../../../components/ui';
+import { Card, Button, GradientBackground } from '../../../components/ui';
 import CalorieTrendChart from '../../../components/charts/CalorieTrendChart';
 import { useAuthStore, useNutritionStore } from '../../../stores';
 import { getNutritionHistory } from '../../../lib/database';
@@ -19,6 +20,7 @@ interface DailyData {
 }
 
 export default function NutritionAnalyticsScreen() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const { targets } = useNutritionStore();
 
@@ -115,9 +117,16 @@ export default function NutritionAnalyticsScreen() {
               />
             ) : (
               <View style={styles.emptyChart}>
+                <Text style={styles.emptyChartEmoji}>📊</Text>
                 <Text style={styles.emptyChartText}>
                   Not enough data yet. Log meals for at least 2 days.
                 </Text>
+                <Button
+                  title="Log a Meal"
+                  variant="outline"
+                  onPress={() => router.back()}
+                  style={{ marginTop: 16 }}
+                />
               </View>
             )}
           </Card>
@@ -267,6 +276,10 @@ const styles = StyleSheet.create({
   emptyChart: {
     paddingVertical: 40,
     alignItems: 'center',
+  },
+  emptyChartEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
   },
   emptyChartText: {
     fontSize: 14,
